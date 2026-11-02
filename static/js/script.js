@@ -19,6 +19,8 @@ const DAYS = 7;  // oggi e i 6 giorni successivi, come nel server
 let data = null;
 let sel = 0;     // giorno mostrato nel Calendario: 0 = oggi, 1 = domani, ...
 let view = "home";  // schermata: "home" (#/) o "cal" (#/calendario)
+let open = null;    // l'evento o l'esame toccato, per mostrarne i dettagli: la sua chiave (inizio + titolo)
+const keyOf = ev => ev.start + ev.title;
 
 function dur(min) {
   if (min < 60) return `${min} min`;
@@ -85,9 +87,23 @@ function renderStrip(el, timed, now, day, isToday) {
     let lane = lanes.findIndex(end => end <= ev.s);
     if (lane < 0) { lane = lanes.length; lanes.push(ev.e); } else lanes[lane] = ev.e;
     const left = pct(hourOf(ev.s)), width = Math.max(pct(hourOf(ev.e)) - left, .8);
-    return `<div class="absolute h-7 truncate rounded-md px-2 text-xs/7 font-semibold ${color(ev.color)} ${isToday && ev.e <= now ? "opacity-45" : ""}"
-      title="${esc(ev.title)} · ${hm(ev.s)}–${hm(ev.e)}" style="left:${left}%;width:calc(${width}% - 2px);top:${lane * 32}px">${esc(ev.title)}</div>`;
+    // ogni blocco è un pulsante: toccalo per leggere il nome intero e i dettagli sotto la barra
+    const on = keyOf(ev) === open;
+    return `<button type="button" data-open="${esc(keyOf(ev))}" aria-expanded="${on}" aria-label="${esc(ev.title)}, ${hm(ev.s)}–${hm(ev.e)}"
+      class="absolute h-7 cursor-pointer truncate rounded-md px-2 text-left text-xs/7 font-semibold transition-shadow hover:ring-2 hover:ring-black/25 ${color(ev.color)} ${on ? "z-[1] ring-2 ring-black" : isToday && ev.e <= now ? "opacity-45" : ""}"
+      style="left:${left}%;width:calc(${width}% - 2px);top:${lane * 32}px">${esc(ev.title)}</button>`;
   }).join("");
+
+  // la scheda dei dettagli dell'evento toccato: nome intero, orario, durata, luogo e calendario
+  const ev = timed.find(e => keyOf(e) === open);
+  const detail = ev ? `<div class="mt-4 flex items-start gap-3 rounded-xl bg-white/70 p-3.5 animate-appear">
+      <div class="min-w-0 flex-1">
+        <div class="font-semibold break-words">${esc(ev.title)}</div>
+        <div class="mt-0.5 text-[13px] text-muted tabular-nums">${hm(ev.s)}–${hm(ev.e)} · ${dur(Math.round((ev.e - ev.s) / 60000))}${ev.location ? " · " + esc(ev.location) : ""}</div>
+        ${ev.calendar ? `<div class="mt-2">${tag(ev)}</div>` : ""}
+      </div>
+      <button type="button" data-open="" aria-label="Chiudi" class="grid size-7 shrink-0 cursor-pointer place-items-center rounded-full text-lg/none text-muted hover:bg-black/10">×</button>
+    </div>` : "";
 
   const nowP = pct(hourOf(now));
   const perHour = (el.clientWidth || 800) / 24;  // px per ora: dirada le etichette su schermi stretti
@@ -99,7 +115,7 @@ function renderStrip(el, timed, now, day, isToday) {
   el.innerHTML = `<div class="relative" style="height:${lanes.length * 32 - 4}px">
       ${isToday ? `<div class="absolute inset-y-0 left-0 rounded-l-lg bg-past" style="width:${nowP}%"></div>` : ""}${blocks}
       ${isToday ? `<div class="absolute -inset-y-1 -ml-px w-0.5 rounded-full bg-accent before:absolute before:-top-1 before:-left-1 before:size-2.5 before:rounded-full before:bg-accent" style="left:${nowP}%"></div>` : ""}
-    </div><div class="relative mt-2.5 h-[18px]">${ticks}</div>`;
+    </div><div aria-hidden="true" class="relative mt-2.5 h-[18px]">${ticks}</div>${detail}`;
 }
 
 function renderNow(el, timed, now) {
@@ -232,11 +248,14 @@ function renderExams(now) {
     const unit = ev.days > 1 ? `<span class="ml-1 text-[15px] font-normal tracking-normal text-muted">giorni</span>` : "";
     const when = cap(ev.s.toLocaleDateString("it-IT", { weekday: "short", day: "numeric", month: "short" }).replaceAll(".", ""))
       + (ev.all_day ? "" : ` · ${hm(ev.s)}`);
-    return `<article class="note w-[44%] min-w-[150px] shrink-0 snap-start p-4 md:w-auto md:min-w-0 md:p-5 ${bg}">
+    // toccando la scheda il nome e l'aula vanno a capo invece di essere tagliati con i puntini
+    const on = keyOf(ev) === open, cut = on ? "break-words" : "truncate";
+    return `<button type="button" data-open="${esc(keyOf(ev))}" aria-expanded="${on}"
+      class="note w-[44%] min-w-[150px] shrink-0 cursor-pointer snap-start p-4 text-left md:w-auto md:min-w-0 md:p-5 ${bg}">
       <div class="font-mono text-[11px] tracking-[.06em] text-muted uppercase tabular-nums">${esc(when)}</div>
       <div class="mt-2 text-[40px]/none font-light tracking-[-.04em] tabular-nums">${big}${unit}</div>
-      <div class="mt-4 truncate font-semibold tracking-[-.015em]" title="${esc(ev.title)}">${esc(ev.name)}</div>
-      <div class="truncate text-[13px] text-muted">${esc(ev.location) || "&nbsp;"}</div></article>`;
+      <div class="mt-4 font-semibold tracking-[-.015em] ${cut}" title="${esc(ev.title)}">${esc(on ? ev.title : ev.name)}</div>
+      <div class="text-[13px] text-muted ${cut}">${esc(ev.location) || "&nbsp;"}</div></button>`;
   }).join("") : `<div class="card w-full px-4 py-4 text-muted md:col-span-4 md:px-5">Nessun esame in calendario nei prossimi mesi.</div>`;
   return exams;
 }
@@ -366,6 +385,16 @@ addEventListener("touchend", e => {
   touch = null;
   if (Math.abs(dx) > 60 && Math.abs(dx) > 1.5 * Math.abs(dy)) select(sel + (dx < 0 ? 1 : -1));  // orizzontale, non scroll
 }, { passive: true });
+
+// Tocco su un evento della barra o su un esame: apre i dettagli; di nuovo, sulla × o altrove, li chiude.
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-open]");
+  const next = b ? (b.dataset.open === open ? null : b.dataset.open || null) : null;
+  if (next === open) return;
+  open = next;
+  render();
+});
+addEventListener("keydown", e => { if (e.key === "Escape" && open) { open = null; render(); } });
 
 $("refresh").onclick = () => load(true);
 addEventListener("hashchange", route);
