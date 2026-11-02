@@ -16,23 +16,27 @@
 <link rel="icon" href="img/icon.png">
 <script src="js/script.js" defer></script>
 </head>
-<body>
-<main class="page">
+<body class="loading">
+<!-- Le barre grigie (.sk) sono segnaposto: restano finché non arrivano i dati, poi script.js le sostituisce. -->
+<main class="page" aria-busy="true">
   <header class="title-row">
     <div>
       <h1 id="date"></h1>
-      <p class="summary" id="summary"></p>
+      <p class="summary" id="summary"><span class="sk" style="width:280px"></span></p>
     </div>
     <div class="now-side">
       <div class="clock num" id="clock"></div>
-      <div class="weather" id="weather"></div>
+      <div class="weather" id="weather"><span class="sk" style="width:110px;margin-left:auto"></span></div>
     </div>
   </header>
 
   <div id="alerts"></div>
 
   <section class="day" aria-label="Adesso e la giornata">
-    <div class="callout" id="nowCard"></div>
+    <div class="callout" id="nowCard">
+      <span class="sk sk-lg" style="width:45%"></span>
+      <span class="sk" style="width:30%"></span>
+    </div>
     <div class="strip" id="strip" aria-hidden="true"></div>
   </section>
 
@@ -40,16 +44,25 @@
     <section class="block">
       <h2>Oggi <span class="count num" id="countToday"></span></h2>
       <div id="allDay" class="tags"></div>
-      <div id="today"></div>
+      <div id="today">
+        <div class="row"><span class="sk"></span><span class="sk" style="width:60%"></span></div>
+        <div class="row"><span class="sk"></span><span class="sk" style="width:45%"></span></div>
+        <div class="row"><span class="sk"></span><span class="sk" style="width:70%"></span></div>
+      </div>
     </section>
     <div class="side">
       <section class="block">
         <h2>Promemoria <span class="count" id="countRem"></span></h2>
-        <div id="reminders"></div>
+        <div id="reminders">
+          <div class="todo"><span class="sk"></span><span class="sk" style="width:65%"></span></div>
+          <div class="todo"><span class="sk"></span><span class="sk" style="width:50%"></span></div>
+        </div>
       </section>
       <section class="block">
         <h2>Domani <span class="count num" id="countTom"></span><span class="h2-side" id="tomWeather"></span></h2>
-        <div id="tomorrow"></div>
+        <div id="tomorrow">
+          <div class="row"><span class="sk"></span><span class="sk" style="width:55%"></span></div>
+        </div>
       </section>
     </div>
   </div>

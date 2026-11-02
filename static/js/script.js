@@ -181,6 +181,8 @@ function render() {
 }
 
 async function load(force) {
+  const btn = $("refresh");
+  if (force) { btn.classList.add("busy"); btn.disabled = true; btn.textContent = "Aggiorno"; }
   try {
     if (force) await fetch("api/refresh", { method: "POST" });
     const r = await fetch("api/dashboard", { cache: "no-store" });
@@ -189,6 +191,10 @@ async function load(force) {
     $("alerts").innerHTML = `<div class="notice">Server non raggiungibile: ${esc(e.message)}</div>`;
   }
   render();
+  // Primo caricamento finito: via i segnaposto, il CSS fa comparire il contenuto con una dissolvenza.
+  document.body.classList.remove("loading");
+  document.querySelector("main").removeAttribute("aria-busy");
+  if (force) { btn.classList.remove("busy"); btn.disabled = false; btn.textContent = "Aggiorna"; }
 }
 
 $("refresh").onclick = () => load(true);
