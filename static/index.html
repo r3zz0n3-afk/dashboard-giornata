@@ -21,55 +21,68 @@
 <link rel="icon" href="img/icon.png">
 <script src="js/script.js" defer></script>
 </head>
-<body class="loading">
-<!-- Schermata d'apertura: copre la pagina finché non arrivano i dati, poi script.js la fa sparire. -->
-<div class="splash" id="splash" role="status">
-  <div class="cal" aria-hidden="true"><span class="cal-month" id="splashMonth"></span><span class="cal-day num" id="splashDay"></span></div>
-  <div class="splash-text">Caricamento<span class="dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></div>
+<body class="loading bg-ground text-ink font-sans text-[15px]/[1.47] tracking-[-.01em] antialiased">
+<!-- Schermata d'apertura: copre la pagina finché non arrivano i dati, poi script.js toglie "loading" dal body
+     e in-[.loading]: smette di valere, quindi la schermata svanisce. -->
+<div id="splash" role="status" class="fixed inset-0 z-10 flex flex-col items-center justify-center gap-5 bg-ground
+  invisible opacity-0 in-[.loading]:visible in-[.loading]:opacity-100 transition-[opacity,visibility] duration-300 ease-out">
+  <div aria-hidden="true" class="card flex h-[82px] w-[76px] flex-col overflow-hidden animate-breathe">
+    <span id="splashMonth" class="bg-today text-center text-xs/[22px] font-semibold text-white"></span>
+    <span id="splashDay" class="grid flex-1 place-items-center text-[34px] font-light tracking-[-.02em] tabular-nums"></span>
+  </div>
+  <div class="text-muted">Caricamento<span aria-hidden="true" class="*:opacity-0 *:animate-dot [&>:nth-child(2)]:[animation-delay:.2s] [&>:nth-child(3)]:[animation-delay:.4s]"><span>.</span><span>.</span><span>.</span></span></div>
 </div>
-<main class="page" aria-busy="true">
-  <header class="title-row">
+<main aria-busy="true" class="mx-auto max-w-[1100px] px-4 pt-6 pb-8 md:px-8 md:pt-12 md:pb-10">
+  <!-- titolo: la data a sinistra, l'ora sottile a destra come sulla schermata di blocco dell'iPhone -->
+  <header class="flex items-start justify-between gap-4">
     <div>
-      <h1 id="date"></h1>
-      <p class="summary" id="summary"></p>
+      <h1 id="date" class="text-[22px]/tight font-bold tracking-[-.025em] md:text-[30px]"></h1>
+      <p id="summary" class="mt-1.5 text-muted [body:not(.loading)_&]:animate-appear"></p>
     </div>
-    <div class="now-side">
-      <div class="clock num" id="clock"></div>
-      <div class="weather" id="weather"></div>
+    <div class="shrink-0 text-right">
+      <div id="clock" class="text-[22px]/tight font-light tracking-[-.02em] tabular-nums md:text-[30px]"></div>
+      <div id="weather" class="mt-1.5 text-sm md:text-[15px] [body:not(.loading)_&]:animate-appear"></div>
     </div>
   </header>
 
   <!-- Una linguetta per ogni giorno della settimana: tocca, scorri col dito o usa le frecce ← → -->
-  <nav class="week" id="week" aria-label="Scegli il giorno"></nav>
+  <nav id="week" aria-label="Scegli il giorno" class="mt-5 grid grid-cols-7 md:mt-7 md:gap-1"></nav>
 
   <div id="alerts"></div>
 
   <div id="dayView">
-    <section class="card day" id="daySection" aria-label="Adesso e la giornata">
-      <div class="now" id="nowCard"></div>
-      <div class="strip" id="strip" aria-hidden="true"></div>
+    <section id="daySection" aria-label="Adesso e la giornata" class="card mt-5 p-4 md:p-5 [body:not(.loading)_&]:animate-appear">
+      <div id="nowCard" class="mb-5 grid gap-1"></div>
+      <div id="strip" aria-hidden="true" class="relative"></div>
     </section>
 
-    <div class="cols">
-      <section class="block">
-        <h2><span id="dayLabel">Oggi</span> <span class="count num" id="countDay"></span><span class="h2-side" id="dayWeather"></span></h2>
-        <div class="card list">
-          <div id="allDay" class="tags"></div>
+    <!-- colonne: il giorno a sinistra, i promemoria sempre a destra (sotto, sul telefono) -->
+    <div class="mt-7 grid items-start gap-6 md:mt-8 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] [body:not(.loading)_&]:animate-appear">
+      <section>
+        <h2 class="mb-2.5 flex items-baseline gap-2 px-4 text-xl font-semibold tracking-[-.02em] md:px-5">
+          <span id="dayLabel">Oggi</span>
+          <span id="countDay" class="text-[15px] font-normal tracking-normal text-muted tabular-nums"></span>
+          <span id="dayWeather" class="ml-auto text-[13px] font-normal tracking-normal text-muted"></span>
+        </h2>
+        <div class="card px-4 py-1 md:px-5">
+          <div id="allDay" class="flex flex-wrap gap-1.5 pt-3.5 pb-1 empty:hidden"></div>
           <div id="dayList"></div>
         </div>
       </section>
-      <aside class="side">
-        <section class="block">
-          <h2>Promemoria <span class="count" id="countRem"></span></h2>
-          <div class="card list" id="reminders"></div>
-        </section>
-      </aside>
+      <section>
+        <h2 class="mb-2.5 flex items-baseline gap-2 px-4 text-xl font-semibold tracking-[-.02em] md:px-5">
+          Promemoria <span id="countRem" class="text-[15px] font-normal tracking-normal text-muted"></span>
+        </h2>
+        <div id="reminders" class="card px-4 py-1 md:px-5"></div>
+      </section>
     </div>
   </div>
 
-  <footer>
+  <footer class="mt-10 flex flex-wrap items-center justify-between gap-3 px-4 text-[13px] text-muted md:px-5">
     <span id="updated"></span>
-    <button id="refresh" type="button">Aggiorna</button>
+    <!-- pulsante a pillola: si "schiaccia" quando lo premi, come su iOS -->
+    <button id="refresh" type="button" class="h-11 cursor-pointer rounded-full bg-active px-4 text-sm font-semibold text-ink
+      transition hover:bg-control active:scale-96 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent md:h-8">Aggiorna</button>
   </footer>
 </main>
 </body>

@@ -12,6 +12,11 @@ PORT="${DEPLOY_PORT:-8080}"
 
 cd "$(dirname "$0")"
 
+# 0. Rigenera lo stile da src/style.css: se è cambiato, il controllo qui sotto chiede di fare il commit.
+if command -v npm >/dev/null; then
+  npm run --silent build >/dev/null
+fi
+
 # 1. Sul server arriva solo ciò che è su GitHub: niente modifiche dimenticate o non inviate.
 if [ -n "$(git status --porcelain)" ]; then
   echo "Hai modifiche non salvate in un commit. Fai prima git commit." >&2; exit 1

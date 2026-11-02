@@ -152,12 +152,32 @@ Il server di default si chiama `homelab`; per usarne un altro: `DEPLOY_HOST=mios
 
 ---
 
+## 6. Modificare lo stile (Tailwind)
+
+Lo stile usa [Tailwind CSS](https://tailwindcss.com): le classi sono scritte direttamente in `static/index.html`
+e in `static/js/script.js`, mentre colori, font e animazioni stanno in `src/style.css` (il blocco `@theme`).
+Tailwind legge questi file e genera `static/css/style.css`, che è il file usato davvero dalla pagina.
+
+Serve [Node.js](https://nodejs.org) solo sul computer dove modifichi lo stile, non sul server:
+
+```bash
+npm install        # una volta sola: scarica Tailwind in node_modules/
+npm run dev        # mentre lavori: rigenera lo stile a ogni salvataggio
+npm run build      # prima del commit: genera la versione finale, compressa
+```
+
+`./deploy.sh` esegue `npm run build` da solo. Se lo stile è cambiato, si ferma e ti chiede di fare il commit.
+
+---
+
 ## File
 
 | File | Cosa fa |
 |---|---|
 | `server.py` | Server: legge iCloud, riceve i promemoria, serve la pagina |
 | `static/index.html` | La dashboard |
+| `src/style.css` | Lo stile: tema e colori per Tailwind |
+| `static/css/style.css` | Lo stile generato da Tailwind (non modificarlo a mano) |
 | `.env` | Le tue impostazioni (privato, non condividerlo) |
 | `data/reminders.json` | Ultimi promemoria ricevuti dall'iPhone |
 | `install.sh` | Installazione e servizio sempre attivo |

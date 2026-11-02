@@ -1,0 +1,13 @@
+{
+  "name": "dashboard-giornata",
+  "private": true,
+  "description": "Lo stile della dashboard: Tailwind genera static/css/style.css da src/style.css",
+  "scripts": {
+    "build": "tailwindcss -i src/style.css -o static/css/style.css --minify",
+    "dev": "tailwindcss -i src/style.css -o static/css/style.css --watch"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.3",
+    "tailwindcss": "^4.3.3"
+  }
+}

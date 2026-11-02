@@ -1,0 +1,92 @@
+/* Sorgente dello stile. Tailwind lo trasforma in static/css/style.css con: npm run build
+   Notion + Apple, con le regole della taste-skill per gli schermi da app.
+   Da Apple: fondo grigio chiaro (nero col tema scuro) con schede che si staccano per tono, non per bordi o ombre;
+   font di sistema (San Francisco su iPhone e Mac); blu Apple sui dati; settimana come l'app Calendario;
+   cerchietti dei Promemoria. Da Notion: i colori delle etichette dei calendari e il blocco "adesso". */
+@import "tailwindcss";
+
+/* dove cercare le classi usate: la pagina e lo script che la disegna */
+@source "../static/index.html";
+@source "../static/js";
+
+/* Il tema: ogni --color-X diventa le classi bg-X, text-X, border-X... */
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, "Segoe UI", Helvetica, Arial, sans-serif;
+  --breakpoint-md: 821px;  /* sotto questa larghezza è il layout da telefono */
+  --radius-card: 18px;
+
+  --color-ground: #f5f5f7;
+  --color-surface: #ffffff;
+  --color-active: #e8e8ed;
+  --color-past: rgba(0, 0, 0, .035);
+  --color-rule: #e5e5ea;
+  --color-control: #c7c7cc;
+  --color-ink: #1d1d1f;
+  --color-muted: #6e6e73;
+  --color-accent: #0066cc;
+  --color-today: #d70015;
+  --color-danger: #c4242a;
+  --color-danger-bg: #ffedea;
+  --color-track: #e8e8ed;
+
+  /* etichette dei calendari, come le proprietà "select" di Notion */
+  --color-t-gray: #e3e2e0;   --color-t-gray-ink: #32302c;
+  --color-t-brown: #eee0da;  --color-t-brown-ink: #442a1e;
+  --color-t-orange: #fadec9; --color-t-orange-ink: #49290e;
+  --color-t-yellow: #fdecc8; --color-t-yellow-ink: #402c1b;
+  --color-t-green: #dbeddb;  --color-t-green-ink: #1c3829;
+  --color-t-blue: #d3e5ef;   --color-t-blue-ink: #183347;
+  --color-t-pink: #f5e0e9;   --color-t-pink-ink: #4c2337;
+  --color-t-red: #ffe2dd;    --color-t-red-ink: #5d1715;
+
+  /* animazioni: diventano le classi animate-appear, animate-breathe... */
+  --animate-appear: appear .35s ease-out;
+  --animate-breathe: breathe 1.6s ease-in-out infinite;
+  --animate-dot: dot 1.2s infinite;
+  @keyframes appear { from { opacity: 0; transform: translateY(4px); } }
+  @keyframes breathe { 50% { transform: translateY(-4px); } }
+  @keyframes dot { 30%, 70% { opacity: 1; } }
+}
+
+/* Tema scuro: stessi nomi, valori di iOS. Le classi non cambiano, cambiano i colori dietro. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-ground: #000000; --color-surface: #1c1c1e; --color-active: #2c2c2e; --color-past: rgba(255, 255, 255, .03);
+    --color-rule: #38383a; --color-control: #545458;
+    --color-ink: #f5f5f7; --color-muted: #98989d;
+    --color-accent: #2997ff; --color-danger: #ff6961; --color-danger-bg: #2c1a1a;
+    --color-track: #3a3a3c;
+    --color-t-gray: #3a3a3c;   --color-t-gray-ink: #e5e5ea;
+    --color-t-brown: #4a3228;  --color-t-brown-ink: #ead8cf;
+    --color-t-orange: #5c3b23; --color-t-orange-ink: #f5d9c2;
+    --color-t-yellow: #56452a; --color-t-yellow-ink: #f3e3c0;
+    --color-t-green: #2b4234;  --color-t-green-ink: #cfe8d6;
+    --color-t-blue: #233b52;   --color-t-blue-ink: #cfe2f1;
+    --color-t-pink: #4b2c3b;   --color-t-pink-ink: #f3d4e3;
+    --color-t-red: #522e2a;    --color-t-red-ink: #f6d3cd;
+  }
+}
+
+/* Una classe fatta su misura: la scheda bianca (grigio scuro col tema scuro) dagli angoli morbidi */
+@utility card {
+  background-color: var(--color-surface);
+  border-radius: 16px;
+  @variant md { border-radius: var(--radius-card); }
+}
+
+@layer base {
+  [hidden] { display: none !important; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before { animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+  }
+}
+
+/* Lo spinner del pulsante Aggiorna mentre lavora (script.js aggiunge e toglie la classe busy) */
+@layer components {
+  .busy { cursor: progress; }
+  .busy::before {
+    content: ""; display: inline-block; width: 12px; height: 12px; margin-right: 8px; vertical-align: -1px;
+    border: 1.5px solid var(--color-control); border-top-color: var(--color-ink); border-radius: 50%;
+    animation: var(--animate-spin);  /* l'animazione "spin" che Tailwind ha già pronta */
+  }
+}

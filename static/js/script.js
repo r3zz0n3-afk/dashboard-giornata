@@ -5,7 +5,16 @@ const dayStart = d => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x;
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
 const isoDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
-const color = c => /^[a-z]+$/.test(c || "") ? `c-${c}` : "c-gray";
+// Colori delle etichette (Notion). Tailwind trova le classi leggendo questo file come testo, quindi:
+// - le classi vanno scritte per intero: un nome costruito a pezzi, come "bg-t-" + colore, non lo vedrebbe;
+// - prima di ${...} serve uno spazio: in "bg-control${x}" vedrebbe la parola "bg-control${x}", non "bg-control".
+const TAG = {
+  gray: "bg-t-gray text-t-gray-ink", brown: "bg-t-brown text-t-brown-ink", orange: "bg-t-orange text-t-orange-ink",
+  yellow: "bg-t-yellow text-t-yellow-ink", green: "bg-t-green text-t-green-ink", blue: "bg-t-blue text-t-blue-ink",
+  pink: "bg-t-pink text-t-pink-ink", red: "bg-t-red text-t-red-ink",
+};
+const color = c => TAG[c] || TAG.gray;
+const PILL = "inline-block max-w-full truncate rounded-full px-[9px] text-xs/[22px] font-semibold tracking-normal";
 const DAYS = 7;  // oggi e i 6 giorni successivi, come nel server
 let data = null;
 let sel = 0;     // giorno mostrato: 0 = oggi, 1 = domani, ...
@@ -24,30 +33,37 @@ function eventsOn(day) {
 
 const dayName = (n, d) => n === 0 ? "Oggi" : n === 1 ? "Domani" : cap(d.toLocaleDateString("it-IT", { weekday: "long" }));
 const forecast = d => data?.weather?.days?.find(x => x.date === isoDay(d));
-const tag = ev => `<span class="tag ${color(ev.color)}">${esc(ev.calendar)}</span>`;
+const tag = (ev, past) => `<span class="${PILL} ${color(ev.color)} ${past ? "opacity-60" : ""}">${esc(ev.calendar)}</span>`;
+const notice = text => `<div class="mt-5 rounded-[14px] bg-danger-bg px-4 py-3.5 text-sm text-danger md:px-5">${esc(text)}</div>`;
 
 function eventRow(ev, now) {
-  let cls = "row", live = "";
-  if (now) {
-    if (ev.e <= now) cls += " past";
-    else if (ev.s <= now) { cls += " now"; live = `<span class="live">In corso, fino alle ${hm(ev.e)}</span>`; }
-  }
-  const meta = [live, ev.calendar ? tag(ev) : "", ev.location ? `<span>${esc(ev.location)}</span>` : ""].filter(Boolean).join("");
-  return `<div class="${cls}"><div class="t num">${hm(ev.s)}<small>${hm(ev.e)}</small></div>
-    <div><div class="title">${esc(ev.title)}</div>${meta ? `<div class="meta">${meta}</div>` : ""}</div></div>`;
+  const past = now && ev.e <= now;
+  const live = now && !past && ev.s <= now ? `<span class="font-semibold text-accent">In corso, fino alle ${hm(ev.e)}</span>` : "";
+  const meta = [live, ev.calendar ? tag(ev, past) : "", ev.location ? `<span>${esc(ev.location)}</span>` : ""].filter(Boolean).join("");
+  const ink = past ? "text-muted" : "";
+  return `<div class="grid grid-cols-[52px_minmax(0,1fr)] gap-3.5 border-b border-rule py-3.5 last:border-0">
+    <div class="font-semibold tabular-nums ${ink}">${hm(ev.s)}<small class="block text-[13px] font-normal text-muted">${hm(ev.e)}</small></div>
+    <div><div class="text-base font-semibold tracking-[-.015em] ${ink}">${esc(ev.title)}</div>
+    ${meta ? `<div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted">${meta}</div>` : ""}</div></div>`;
 }
 
-// Le linguette dei giorni: oggi ha il numero nel cerchio rosso, il puntino dice che ci sono impegni.
+// Le linguette dei giorni, come nell'app Calendario: oggi in rosso, il giorno scelto nel cerchio pieno,
+// il puntino dice che ci sono impegni.
 function renderWeek(now) {
   const today = dayStart(now);
   let html = "";
   for (let i = 0; i < DAYS; i++) {
     const d = addDays(today, i);
     const busy = data && eventsOn(d).length;
-    html += `<button type="button" class="wd${i === sel ? " sel" : ""}${i === 0 ? " today" : ""}" data-i="${i}"
-      aria-pressed="${i === sel}" aria-label="${dayName(i, d)}, ${d.getDate()}">
-      <span class="wd-name">${cap(d.toLocaleDateString("it-IT", { weekday: "short" }).replace(".", ""))}</span>
-      <span class="wd-num num">${d.getDate()}</span><span class="wd-dot${busy ? "" : " off"}"></span></button>`;
+    const num = i === sel && i === 0 ? "bg-today font-semibold text-white"
+      : i === sel ? "bg-ink font-semibold text-surface"
+      : i === 0 ? "font-semibold text-today group-hover:bg-active"
+      : "group-hover:bg-active";
+    html += `<button type="button" data-i="${i}" aria-pressed="${i === sel}" aria-label="${dayName(i, d)}, ${d.getDate()}"
+      class="group flex cursor-pointer flex-col items-center gap-1 py-1 text-muted">
+      <span class="text-xs">${cap(d.toLocaleDateString("it-IT", { weekday: "short" }).replace(".", ""))}</span>
+      <span class="size-[34px] rounded-full text-center text-[17px]/[34px] tabular-nums transition-colors md:size-9 md:leading-9 ${num}">${d.getDate()}</span>
+      <span class="size-1 rounded-full bg-control ${busy ? "" : "invisible"}"></span></button>`;
   }
   $("week").innerHTML = html;
 }
@@ -63,38 +79,40 @@ function renderStrip(timed, now, day, isToday) {
     let lane = lanes.findIndex(end => end <= ev.s);
     if (lane < 0) { lane = lanes.length; lanes.push(ev.e); } else lanes[lane] = ev.e;
     const left = pct(hourOf(ev.s)), width = Math.max(pct(hourOf(ev.e)) - left, .8);
-    return `<div class="ev ${color(ev.color)}${isToday && ev.e <= now ? " done" : ""}" title="${esc(ev.title)} · ${hm(ev.s)}–${hm(ev.e)}"
-      style="left:${left}%;width:calc(${width}% - 2px);top:${lane * 32}px">${esc(ev.title)}</div>`;
+    return `<div class="absolute h-7 truncate rounded-md px-2 text-xs/7 font-semibold ${color(ev.color)} ${isToday && ev.e <= now ? "opacity-45" : ""}"
+      title="${esc(ev.title)} · ${hm(ev.s)}–${hm(ev.e)}" style="left:${left}%;width:calc(${width}% - 2px);top:${lane * 32}px">${esc(ev.title)}</div>`;
   }).join("");
 
   const nowP = pct(hourOf(now));
   const perHour = ($("strip").clientWidth || 800) / 24;  // px per ora: dirada le etichette su schermi stretti
   const step = perHour >= 48 ? 1 : perHour >= 24 ? 2 : perHour >= 12 ? 3 : 6;
   let ticks = "";
-  for (let h = 0; h <= 24; h += step) ticks += `<span class="num" style="left:${pct(h)}%">${String(h).padStart(2, "0")}</span>`;
+  for (let h = 0; h <= 24; h += step) ticks += `<span class="absolute top-0 -translate-x-1/2 text-xs text-muted tabular-nums first:translate-x-0 last:-translate-x-full" style="left:${pct(h)}%">${String(h).padStart(2, "0")}</span>`;
 
-  $("strip").innerHTML = `<div class="lanes" style="height:${lanes.length * 32 - 4}px">
-      ${isToday ? `<div class="past-area" style="width:${nowP}%"></div>` : ""}${blocks}
-      ${isToday ? `<div class="nowline" style="left:${nowP}%"></div>` : ""}
-    </div><div class="hours">${ticks}</div>`;
+  // la linea di adesso è blu con un pallino in cima (before:), la zona già passata è velata di grigio
+  $("strip").innerHTML = `<div class="relative" style="height:${lanes.length * 32 - 4}px">
+      ${isToday ? `<div class="absolute inset-y-0 left-0 rounded-l-lg bg-past" style="width:${nowP}%"></div>` : ""}${blocks}
+      ${isToday ? `<div class="absolute -inset-y-1 -ml-px w-0.5 rounded-full bg-accent before:absolute before:-top-1 before:-left-1 before:size-2.5 before:rounded-full before:bg-accent" style="left:${nowP}%"></div>` : ""}
+    </div><div class="relative mt-2.5 h-[18px]">${ticks}</div>`;
 }
 
 function renderNow(timed, now) {
   const currents = timed.filter(e => e.s <= now && e.e > now);
   const next = timed.find(e => e.s > now);
   const then = next
-    ? `<div class="then">Dopo: <b>${esc(next.title)}</b> alle ${hm(next.s)}, tra ${dur(Math.round((next.s - now) / 60000))}${next.location ? " · " + esc(next.location) : ""}</div>`
-    : `<div class="then">Dopo: niente altro in calendario oggi.</div>`;
+    ? `<div class="text-muted">Dopo: <b class="font-semibold text-ink">${esc(next.title)}</b> alle ${hm(next.s)}, tra ${dur(Math.round((next.s - now) / 60000))}${next.location ? " · " + esc(next.location) : ""}</div>`
+    : `<div class="text-muted">Dopo: niente altro in calendario oggi.</div>`;
+  const lead = "text-lg/tight font-semibold tracking-[-.02em] md:text-xl/tight";
   if (currents.length) {
     const maxEnd = new Date(Math.max(...currents.map(e => e.e)));
     const minStart = new Date(Math.min(...currents.map(e => e.s)));
     const pct = Math.min(100, (now - minStart) / (maxEnd - minStart) * 100);
     const titles = currents.map(e => esc(e.title)).join(" e ");
-    $("nowCard").innerHTML = `<div class="lead">${titles} <span>· mancano ${dur(Math.round((maxEnd - now) / 60000))}, fino alle ${hm(maxEnd)}</span></div>
-      <div class="progress"><span style="width:${pct}%"></span></div>${then}`;
+    $("nowCard").innerHTML = `<div class="${lead}">${titles} <span class="font-normal text-muted">· mancano ${dur(Math.round((maxEnd - now) / 60000))}, fino alle ${hm(maxEnd)}</span></div>
+      <div class="mt-2.5 mb-1.5 h-1.5 max-w-[420px] overflow-hidden rounded-full bg-track"><span class="block h-full rounded-full bg-accent" style="width:${pct}%"></span></div>${then}`;
   } else {
-    const lead = next ? `Libero fino alle ${hm(next.s)}` : "Libero per il resto della giornata";
-    $("nowCard").innerHTML = `<div class="lead">${lead}</div>${next ? then : ""}`;
+    const free = next ? `Libero fino alle ${hm(next.s)}` : "Libero per il resto della giornata";
+    $("nowCard").innerHTML = `<div class="${lead}">${free}</div>${next ? then : ""}`;
   }
 }
 
@@ -102,13 +120,14 @@ function renderNow(timed, now) {
 function renderWeather(day) {
   const w = data.weather;
   if (!w || !w.now) {
-    $("weather").innerHTML = w?.error ? `<span class="err">${esc(w.error)}</span>` : "";
+    $("weather").innerHTML = w?.error ? `<span class="text-[13px] text-muted">${esc(w.error)}</span>` : "";
     $("dayWeather").textContent = "";
     return;
   }
   const t = w.days?.[0];
-  $("weather").innerHTML = `<span class="temp num">${w.now.temp}°</span> ${esc(w.now.text)}
-    ${t ? `<span class="range num">${t.min}°–${t.max}°<span class="place"> · ${esc(w.place)}</span></span>` : ""}`;
+  // il nome della città si vede solo da computer: sul telefono lascia spazio alla data
+  $("weather").innerHTML = `<span class="font-semibold tabular-nums">${w.now.temp}°</span> ${esc(w.now.text)}
+    ${t ? `<span class="block text-[13px] text-muted tabular-nums">${t.min}°–${t.max}°<span class="hidden md:inline"> · ${esc(w.place)}</span></span>` : ""}`;
   if (w.error) $("weather").title = w.error;  // dato vecchio: l'errore resta visibile al passaggio del mouse
   const f = forecast(day);
   $("dayWeather").textContent = f ? `${f.text}, ${f.min}°–${f.max}°` : "";
@@ -126,16 +145,19 @@ function renderReminders(now) {
     else groups.later.push(r);
   }
   const byDate = (a, b) => a.d - b.d;
-  const remRow = (r, kind) => {
+  // il cerchietto dell'app Promemoria; la riga di separazione manca sull'ultima di ogni gruppo
+  const remRow = (r, kind, last) => {
     let when = "";
     if (r.d) {
       const sameDay = dayStart(r.d).getTime() === tStart.getTime();
       const dayTxt = sameDay ? "oggi" : r.d.toLocaleDateString("it-IT", { weekday: "short", day: "numeric", month: "short" });
       when = esc(r.date_only ? dayTxt : `${dayTxt} alle ${hm(r.d)}`);
-      if (kind === "overdue") when = `<b>${when}</b>`;
+      if (kind === "overdue") when = `<b class="font-semibold text-danger">${when}</b>`;
     }
     const meta = [when, esc(r.list)].filter(Boolean).join(" · ");
-    return `<div class="todo ${kind}"><div class="box"></div><div><div>${esc(r.title)}</div>${meta ? `<div class="when">${meta}</div>` : ""}</div></div>`;
+    return `<div class="grid grid-cols-[20px_minmax(0,1fr)] gap-3 py-2.5 ${last ? "" : "border-b border-rule"}">
+      <div class="mt-px size-5 rounded-full border-[1.5px] border-control"></div>
+      <div><div>${esc(r.title)}</div>${meta ? `<div class="text-[13px] text-muted">${meta}</div>` : ""}</div></div>`;
   };
   const sections = [["Scaduti", "overdue"], ["Oggi", "today"], ["Prossimi", "later"], ["Senza data", "nodate"]];
   let html = "";
@@ -144,10 +166,12 @@ function renderReminders(now) {
     if (!list.length) continue;
     if (key !== "nodate") list.sort(byDate);
     const max = key === "later" ? 5 : 20;
-    html += `<div class="group">${label}</div>` + list.slice(0, max).map(r => remRow(r, key)).join("")
-      + (list.length > max ? `<div class="more">e altri ${list.length - max}</div>` : "");
+    const shown = list.slice(0, max);
+    html += `<div class="${html ? "mt-4" : "mt-3.5"} mb-0.5 text-[13px] font-semibold text-muted">${label}</div>`
+      + shown.map((r, i) => remRow(r, key, i === shown.length - 1)).join("")
+      + (list.length > max ? `<div class="pt-1 pb-3 pl-8 text-[13px] text-muted">e altri ${list.length - max}</div>` : "");
   }
-  $("reminders").innerHTML = html || `<div class="empty">${data.reminders_updated_at ? "Nessun promemoria da fare." : "Nessun promemoria ricevuto dall'iPhone finora."}</div>`;
+  $("reminders").innerHTML = html || `<div class="py-4 text-muted">${data.reminders_updated_at ? "Nessun promemoria da fare." : "Nessun promemoria ricevuto dall'iPhone finora."}</div>`;
   const pending = groups.overdue.length + groups.today.length;
   $("countRem").textContent = pending ? `${pending} da fare oggi` : "";
   return groups;
@@ -161,16 +185,16 @@ function render() {
   renderWeek(now);
   if (!data) return;
 
-  $("alerts").innerHTML = (data.errors || []).map(e => `<div class="notice">${esc(e)}</div>`).join("");
-  if (data.demo) $("date").innerHTML += '<span class="tag c-gray demo">Demo</span>';
+  $("alerts").innerHTML = (data.errors || []).map(notice).join("");
+  if (data.demo) $("date").innerHTML += `<span class="${PILL} ${TAG.gray} ml-2.5 align-[6px]">Demo</span>`;
 
   // Il giorno scelto
   const events = eventsOn(day);
   const allDay = events.filter(e => e.all_day), timed = events.filter(e => !e.all_day);
   $("dayLabel").textContent = dayName(sel, day);
-  $("allDay").innerHTML = allDay.map(e => `<span class="tag ${color(e.color)}">${esc(e.title)}</span>`).join("");
+  $("allDay").innerHTML = allDay.map(e => `<span class="${PILL} ${color(e.color)}">${esc(e.title)}</span>`).join("");
   $("dayList").innerHTML = timed.length ? timed.map(e => eventRow(e, isToday ? now : null)).join("")
-    : `<div class="empty">${allDay.length ? "Nessun impegno con orario." : "Niente in calendario."}</div>`;
+    : `<div class="py-4 text-muted">${allDay.length ? "Nessun impegno con orario." : "Niente in calendario."}</div>`;
   $("countDay").textContent = events.length || "";
 
   $("nowCard").hidden = !isToday;  // "adesso" ha senso solo oggi
@@ -222,7 +246,7 @@ async function load(force) {
     const r = await fetch("api/dashboard", { cache: "no-store" });
     data = await r.json();
   } catch (e) {
-    $("alerts").innerHTML = `<div class="notice">Server non raggiungibile: ${esc(e.message)}</div>`;
+    $("alerts").innerHTML = notice(`Server non raggiungibile: ${e.message}`);
   }
   render();
   // Primo caricamento finito: la schermata d'apertura svanisce e il contenuto compare con una dissolvenza.

@@ -11,3 +11,6 @@ data/
 
 # file di prova della taste-skill
 .taste-skill/
+
+# pacchetti di npm (Tailwind): si reinstallano con npm install
+node_modules/
