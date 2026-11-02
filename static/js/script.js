@@ -191,11 +191,20 @@ async function load(force) {
     $("alerts").innerHTML = `<div class="notice">Server non raggiungibile: ${esc(e.message)}</div>`;
   }
   render();
-  // Primo caricamento finito: via i segnaposto, il CSS fa comparire il contenuto con una dissolvenza.
-  document.body.classList.remove("loading");
-  document.querySelector("main").removeAttribute("aria-busy");
+  // Primo caricamento finito: la schermata d'apertura svanisce e il contenuto compare con una dissolvenza.
+  // Resta almeno SPLASH_MIN ms, così non fa solo un lampo quando i dati arrivano subito.
+  if (document.body.classList.contains("loading")) {
+    await new Promise(r => setTimeout(r, Math.max(0, SPLASH_MIN - (Date.now() - started))));
+    document.body.classList.remove("loading");
+    document.querySelector("main").removeAttribute("aria-busy");
+  }
   if (force) { btn.classList.remove("busy"); btn.disabled = false; btn.textContent = "Aggiorna"; }
 }
+
+const started = Date.now(), SPLASH_MIN = 600;
+const today0 = new Date();
+$("splashMonth").textContent = today0.toLocaleDateString("it-IT", { month: "short" }).replace(".", "");
+$("splashDay").textContent = today0.getDate();
 
 $("refresh").onclick = () => load(true);
 render();                            // data e orologio subito, senza aspettare il server
