@@ -127,6 +127,31 @@ Non serve aprire porte sul router e la dashboard **resta privata**: la vedi solo
 
 ---
 
+## 5. Aggiornare il server con un comando
+
+Se la dashboard gira su un altro computer (un server raggiungibile via `ssh`), puoi aggiornarlo con:
+
+```bash
+./deploy.sh
+```
+
+Lo script invia a GitHub i commit mancanti. Poi, sul server, scarica l'ultima versione con `git pull`,
+aggiorna le librerie se servono, riavvia il servizio e controlla che la pagina risponda.
+Il server di default si chiama `homelab`; per usarne un altro: `DEPLOY_HOST=mioserver ./deploy.sh`.
+
+**Preparazione, da fare una volta sola sul server:**
+1. Installa git: `sudo apt install git`.
+2. Se il repository è privato, crea una chiave con `ssh-keygen -t ed25519 -f ~/.ssh/github_dashboard`.
+   Aggiungila al repository su GitHub, in *Settings → Deploy keys*, lasciando la **sola lettura**.
+   Poi, in `~/.ssh/config`, scrivi:
+   ```
+   Host github.com
+     IdentityFile ~/.ssh/github_dashboard
+   ```
+3. Clona il repository: `git clone git@github.com:TUO-UTENTE/dashboard-giornata.git`.
+
+---
+
 ## File
 
 | File | Cosa fa |
@@ -136,3 +161,4 @@ Non serve aprire porte sul router e la dashboard **resta privata**: la vedi solo
 | `.env` | Le tue impostazioni (privato, non condividerlo) |
 | `data/reminders.json` | Ultimi promemoria ricevuti dall'iPhone |
 | `install.sh` | Installazione e servizio sempre attivo |
+| `deploy.sh` | Aggiorna il server da GitHub con un comando |
