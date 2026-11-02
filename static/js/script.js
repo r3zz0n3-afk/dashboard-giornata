@@ -176,6 +176,7 @@ function render() {
   $("nowCard").hidden = !isToday;  // "adesso" ha senso solo oggi
   if (isToday) renderNow(timed, now);
   renderStrip(timed, now, day, isToday);
+  $("daySection").hidden = !isToday && !timed.length;  // un giorno futuro senza orari: niente scheda vuota
   renderWeather(day);
   const groups = renderReminders(now);  // i promemoria sono sempre gli stessi, qualunque giorno guardi
 

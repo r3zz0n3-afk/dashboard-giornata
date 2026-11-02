@@ -4,17 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#191919" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
 <title>La mia giornata</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Il font arriva da Google: con media="print" il browser non lo aspetta per disegnare la pagina,
      poi onload lo attiva. Intanto si vede il font di sistema (su iPhone San Francisco). -->
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap"
       media="print" onload="this.media='all'">
 <!-- Il colore di fondo è qui dentro, così è giusto fin dal primo istante, anche prima che arrivi style.css. -->
-<style>html{background:#fff}@media (prefers-color-scheme:dark){html{background:#191919}}</style>
+<style>html{background:#f5f5f7}@media (prefers-color-scheme:dark){html{background:#000}}</style>
 <link rel="stylesheet" href="css/style.css">
 <link rel="apple-touch-icon" href="img/icon.png">
 <link rel="manifest" href="manifest.json">
@@ -45,21 +45,23 @@
   <div id="alerts"></div>
 
   <div id="dayView">
-    <section class="day" aria-label="Adesso e la giornata">
-      <div class="callout" id="nowCard"></div>
+    <section class="card day" id="daySection" aria-label="Adesso e la giornata">
+      <div class="now" id="nowCard"></div>
       <div class="strip" id="strip" aria-hidden="true"></div>
     </section>
 
     <div class="cols">
       <section class="block">
         <h2><span id="dayLabel">Oggi</span> <span class="count num" id="countDay"></span><span class="h2-side" id="dayWeather"></span></h2>
-        <div id="allDay" class="tags"></div>
-        <div id="dayList"></div>
+        <div class="card list">
+          <div id="allDay" class="tags"></div>
+          <div id="dayList"></div>
+        </div>
       </section>
       <aside class="side">
         <section class="block">
           <h2>Promemoria <span class="count" id="countRem"></span></h2>
-          <div id="reminders"></div>
+          <div class="card list" id="reminders"></div>
         </section>
       </aside>
     </div>
