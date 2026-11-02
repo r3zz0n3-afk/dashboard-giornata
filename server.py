@@ -28,6 +28,7 @@ WEATHER_CITY = os.getenv("WEATHER_CITY", "").strip()
 WEATHER_SECONDS = int(os.getenv("WEATHER_SECONDS", "900"))
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "8080"))
+DAYS = 7  # giorni mostrati nella pagina: oggi e i 6 successivi
 
 DATA = BASE / "data"
 DATA.mkdir(exist_ok=True)
@@ -51,7 +52,7 @@ def _local(v):
     return datetime.combine(v, dtime.min, TZ), True
 
 
-def fetch_caldav(day: date, days: int = 2):
+def fetch_caldav(day: date, days: int = DAYS):
     import caldav  # import qui così la modalità demo non lo richiede
 
     start = datetime.combine(day, dtime.min, TZ)
@@ -118,6 +119,10 @@ def demo_events(day: date):
          "location": "Studio 12", "calendar": "Università", "color": PALETTE[0]},
         {"title": "Cena di compleanno", "start": at(tom, 20, 30), "end": at(tom, 23), "all_day": False,
          "location": "", "calendar": "Personale", "color": PALETTE[2]},
+    ] + [  # qualche impegno anche nel resto della settimana
+        {"title": t, "start": at(day + timedelta(days=n), h), "end": at(day + timedelta(days=n), h + 2), "all_day": False,
+         "location": "", "calendar": "Università", "color": PALETTE[0]}
+        for n, t, h in [(2, "Laboratorio", 9), (3, "Lezione di Fisica", 11), (4, "Esercitazione", 14), (5, "Ripasso", 10)]
     ]
 
 
@@ -165,15 +170,15 @@ def fetch_weather():
         _weather["place"] = res[0]
     place = _weather["place"]
     f = _get_json("https://api.open-meteo.com/v1/forecast", {
-        "latitude": place["latitude"], "longitude": place["longitude"], "timezone": str(TZ), "forecast_days": 2,
+        "latitude": place["latitude"], "longitude": place["longitude"], "timezone": str(TZ), "forecast_days": DAYS,
         "current": "temperature_2m,weather_code",
         "hourly": "precipitation_probability",
         "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
     })
-    day = lambda i: {"text": WMO.get(f["daily"]["weather_code"][i], "—"),
-                     "max": round(f["daily"]["temperature_2m_max"][i]),
-                     "min": round(f["daily"]["temperature_2m_min"][i]),
-                     "rain": f["daily"]["precipitation_probability_max"][i]}
+    d = f["daily"]
+    days = [{"date": d["time"][i], "text": WMO.get(d["weather_code"][i], "—"),
+             "max": round(d["temperature_2m_max"][i]), "min": round(d["temperature_2m_min"][i]),
+             "rain": d["precipitation_probability_max"][i]} for i in range(len(d["time"]))]
     # prima ora da adesso a fine giornata con pioggia probabile (>= 50%)
     now_h, today = datetime.now(TZ).strftime("%Y-%m-%dT%H:00"), datetime.now(TZ).date().isoformat()
     rain = next(({"from": t[11:16], "prob": p}
@@ -181,16 +186,18 @@ def fetch_weather():
                  if t.startswith(today) and t >= now_h and (p or 0) >= 50), None)
     return {"place": place["name"],
             "now": {"temp": round(f["current"]["temperature_2m"]), "text": WMO.get(f["current"]["weather_code"], "—")},
-            "today": day(0), "tomorrow": day(1), "rain": rain}
+            "days": days, "rain": rain}
 
 
 def get_weather():
     if not WEATHER_CITY:
         return None  # meteo non configurato: la pagina non lo mostra
     if DEMO:
-        return {"place": WEATHER_CITY, "now": {"temp": 14, "text": "Poco nuvoloso"},
-                "today": {"text": "Rovesci", "max": 17, "min": 9, "rain": 70},
-                "tomorrow": {"text": "Sereno", "max": 16, "min": 7, "rain": 0}, "rain": {"from": "16:00", "prob": 70}}
+        today = datetime.now(TZ).date()
+        sky = [("Rovesci", 70), ("Sereno", 0), ("Poco nuvoloso", 10), ("Pioggia", 80), ("Nuvoloso", 30), ("Sereno", 0), ("Sereno", 5)]
+        return {"place": WEATHER_CITY, "now": {"temp": 14, "text": "Poco nuvoloso"}, "rain": {"from": "16:00", "prob": 70},
+                "days": [{"date": (today + timedelta(days=i)).isoformat(), "text": t, "max": 17 - i % 3, "min": 8 + i % 2, "rain": r}
+                         for i, (t, r) in enumerate(sky[:DAYS])]}
     with _wlock:
         if time.time() - _weather["at"] < WEATHER_SECONDS and _weather["data"]:
             return _weather["data"]

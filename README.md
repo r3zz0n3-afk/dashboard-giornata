@@ -2,9 +2,9 @@
 
 Una pagina web che mostra la tua giornata:
 - **Adesso / Prossimo**: cosa stai facendo e cosa viene dopo, con il tempo che manca.
-- **Oggi**: gli eventi del calendario Apple (iCloud), con quelli passati sbiaditi.
-- **Promemoria**: quelli scaduti, quelli di oggi, i prossimi e quelli senza data.
-- **Domani**: un'anteprima.
+- **Un giorno alla volta, per tutta la settimana**: gli eventi del calendario Apple (iCloud) su una barra dalle 00 alle 24.
+  Per cambiare giorno tocca le linguette, scorri col dito o usa le frecce ← → della tastiera.
+- **Promemoria**: quelli scaduti, quelli di oggi, i prossimi e quelli senza data. Restano visibili in ogni giorno.
 
 Si aggiorna da sola ogni 5 minuti e ha il tema chiaro o scuro automatico.
 
@@ -69,8 +69,8 @@ WEATHER_CITY=Bologna
 ```
 poi esegui `systemctl --user restart dashboard-giornata`. Se lasci il campo vuoto, il meteo non viene mostrato.
 
-La dashboard mostra la temperatura e il cielo sotto l'orologio, avvisa nel riepilogo se oggi è probabile che piova
-e aggiunge le previsioni di domani accanto al titolo "Domani".
+La dashboard mostra la temperatura e il cielo sotto l'orologio e avvisa nel riepilogo se è probabile che piova.
+Per ogni giorno della settimana mostra le previsioni accanto al titolo del giorno.
 
 ---
 

@@ -39,28 +39,29 @@
     </div>
   </header>
 
+  <!-- Una linguetta per ogni giorno della settimana: tocca, scorri col dito o usa le frecce ← → -->
+  <nav class="week" id="week" aria-label="Scegli il giorno"></nav>
+
   <div id="alerts"></div>
 
-  <section class="day" aria-label="Adesso e la giornata">
-    <div class="callout" id="nowCard"></div>
-    <div class="strip" id="strip" aria-hidden="true"></div>
-  </section>
-
-  <div class="cols">
-    <section class="block">
-      <h2>Oggi <span class="count num" id="countToday"></span></h2>
-      <div id="allDay" class="tags"></div>
-      <div id="today"></div>
+  <div id="dayView">
+    <section class="day" aria-label="Adesso e la giornata">
+      <div class="callout" id="nowCard"></div>
+      <div class="strip" id="strip" aria-hidden="true"></div>
     </section>
-    <div class="side">
+
+    <div class="cols">
       <section class="block">
-        <h2>Promemoria <span class="count" id="countRem"></span></h2>
-        <div id="reminders"></div>
+        <h2><span id="dayLabel">Oggi</span> <span class="count num" id="countDay"></span><span class="h2-side" id="dayWeather"></span></h2>
+        <div id="allDay" class="tags"></div>
+        <div id="dayList"></div>
       </section>
-      <section class="block">
-        <h2>Domani <span class="count num" id="countTom"></span><span class="h2-side" id="tomWeather"></span></h2>
-        <div id="tomorrow"></div>
-      </section>
+      <aside class="side">
+        <section class="block">
+          <h2>Promemoria <span class="count" id="countRem"></span></h2>
+          <div id="reminders"></div>
+        </section>
+      </aside>
     </div>
   </div>
 
