@@ -76,6 +76,9 @@
 
 @layer base {
   [hidden] { display: none !important; }
+  /* niente barra di scorrimento a destra: la pagina scorre lo stesso, come nelle app */
+  html { scrollbar-width: none; }
+  html::-webkit-scrollbar { display: none; }
   @media (prefers-reduced-motion: reduce) {
     *, *::before { animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
   }

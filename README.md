@@ -1,10 +1,16 @@
 # Dashboard giornata
 
-Una pagina web che mostra la tua giornata:
-- **Adesso / Prossimo**: cosa stai facendo e cosa viene dopo, con il tempo che manca.
-- **Un giorno alla volta, per tutta la settimana**: gli eventi del calendario Apple (iCloud) su una barra dalle 00 alle 24.
-  Per cambiare giorno tocca le linguette, scorri col dito o usa le frecce ← → della tastiera.
-- **Promemoria**: quelli scaduti, quelli di oggi, i prossimi e quelli senza data. Restano visibili in ogni giorno.
+Una pagina web con due schermate, che si scelgono dalla barra in basso sul telefono o in alto sul computer.
+
+**Home**, la dashboard della giornata:
+- **Adesso / Prossimo**: cosa stai facendo e cosa viene dopo, con il tempo che manca, sulla barra delle ore di oggi.
+- **Oggi**: gli eventi del calendario Apple (iCloud), con quelli passati sbiaditi.
+- **Promemoria**: quelli scaduti, quelli di oggi, i prossimi e quelli senza data.
+
+**Calendario**, la settimana un giorno alla volta:
+- Ogni giorno ha la barra dalle 00 alle 24 e la lista degli impegni.
+- **La settimana** riassume tutti i giorni, con il numero di impegni e il meteo.
+- Per cambiare giorno tocca le linguette o le righe della settimana, scorri col dito o usa le frecce ← → della tastiera.
 
 Si aggiorna da sola ogni 5 minuti e ha il tema chiaro o scuro automatico.
 

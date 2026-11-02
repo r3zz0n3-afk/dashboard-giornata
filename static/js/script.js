@@ -17,7 +17,8 @@ const color = c => TAG[c] || TAG.gray;
 const PILL = "inline-block max-w-full truncate rounded-full px-[9px] text-xs/[22px] font-semibold tracking-normal";
 const DAYS = 7;  // oggi e i 6 giorni successivi, come nel server
 let data = null;
-let sel = 0;     // giorno mostrato: 0 = oggi, 1 = domani, ...
+let sel = 0;     // giorno mostrato nel Calendario: 0 = oggi, 1 = domani, ...
+let view = "home";  // schermata: "home" (#/) o "cal" (#/calendario)
 
 function dur(min) {
   if (min < 60) return `${min} min`;
@@ -29,6 +30,11 @@ function eventsOn(day) {
   const s = dayStart(day), e = addDays(s, 1);
   return (data?.events || []).map(ev => ({ ...ev, s: new Date(ev.start), e: new Date(ev.end) }))
     .filter(ev => ev.s < e && ev.e > s);
+}
+
+function split(day) {
+  const events = eventsOn(day);
+  return { events, allDay: events.filter(e => e.all_day), timed: events.filter(e => !e.all_day) };
 }
 
 const dayName = (n, d) => n === 0 ? "Oggi" : n === 1 ? "Domani" : cap(d.toLocaleDateString("it-IT", { weekday: "long" }));
@@ -69,8 +75,8 @@ function renderWeek(now) {
 }
 
 // La barra della giornata, dalle 00 alle 24: ogni impegno sulla sua fascia oraria, su più corsie se si sovrappongono.
-function renderStrip(timed, now, day, isToday) {
-  if (!timed.length) { $("strip").innerHTML = ""; return; }
+function renderStrip(el, timed, now, day, isToday) {
+  if (!timed.length) { el.innerHTML = ""; return; }
   const hourOf = d => (d - day) / 3600000;
   const pct = h => Math.min(Math.max(h, 0), 24) / 24 * 100;
 
@@ -84,19 +90,19 @@ function renderStrip(timed, now, day, isToday) {
   }).join("");
 
   const nowP = pct(hourOf(now));
-  const perHour = ($("strip").clientWidth || 800) / 24;  // px per ora: dirada le etichette su schermi stretti
+  const perHour = (el.clientWidth || 800) / 24;  // px per ora: dirada le etichette su schermi stretti
   const step = perHour >= 48 ? 1 : perHour >= 24 ? 2 : perHour >= 12 ? 3 : 6;
   let ticks = "";
   for (let h = 0; h <= 24; h += step) ticks += `<span class="absolute top-0 -translate-x-1/2 text-xs text-muted tabular-nums first:translate-x-0 last:-translate-x-full" style="left:${pct(h)}%">${String(h).padStart(2, "0")}</span>`;
 
   // la linea di adesso è blu con un pallino in cima (before:), la zona già passata è velata di grigio
-  $("strip").innerHTML = `<div class="relative" style="height:${lanes.length * 32 - 4}px">
+  el.innerHTML = `<div class="relative" style="height:${lanes.length * 32 - 4}px">
       ${isToday ? `<div class="absolute inset-y-0 left-0 rounded-l-lg bg-past" style="width:${nowP}%"></div>` : ""}${blocks}
       ${isToday ? `<div class="absolute -inset-y-1 -ml-px w-0.5 rounded-full bg-accent before:absolute before:-top-1 before:-left-1 before:size-2.5 before:rounded-full before:bg-accent" style="left:${nowP}%"></div>` : ""}
     </div><div class="relative mt-2.5 h-[18px]">${ticks}</div>`;
 }
 
-function renderNow(timed, now) {
+function renderNow(el, timed, now) {
   const currents = timed.filter(e => e.s <= now && e.e > now);
   const next = timed.find(e => e.s > now);
   const then = next
@@ -108,20 +114,29 @@ function renderNow(timed, now) {
     const minStart = new Date(Math.min(...currents.map(e => e.s)));
     const pct = Math.min(100, (now - minStart) / (maxEnd - minStart) * 100);
     const titles = currents.map(e => esc(e.title)).join(" e ");
-    $("nowCard").innerHTML = `<div class="${lead}">${titles} <span class="font-normal text-muted">· mancano ${dur(Math.round((maxEnd - now) / 60000))}, fino alle ${hm(maxEnd)}</span></div>
+    el.innerHTML = `<div class="${lead}">${titles} <span class="font-normal text-muted">· mancano ${dur(Math.round((maxEnd - now) / 60000))}, fino alle ${hm(maxEnd)}</span></div>
       <div class="mt-2.5 mb-1.5 h-1.5 max-w-[420px] overflow-hidden rounded-full bg-track"><span class="block h-full rounded-full bg-accent" style="width:${pct}%"></span></div>${then}`;
   } else {
     const free = next ? `Libero fino alle ${hm(next.s)}` : "Libero per il resto della giornata";
-    $("nowCard").innerHTML = `<div class="${lead}">${free}</div>${next ? then : ""}`;
+    el.innerHTML = `<div class="${lead}">${free}</div>${next ? then : ""}`;
   }
 }
 
-// Meteo: adesso sotto l'orologio, le previsioni del giorno scelto accanto al suo titolo. Se non è configurato non compare.
-function renderWeather(day) {
+// La lista degli impegni di un giorno: prima quelli di giornata intera come etichette, poi quelli con orario.
+function renderList(ids, { events, allDay, timed }, now) {
+  $(ids.allDay).innerHTML = allDay.map(e => `<span class="${PILL} ${color(e.color)}">${esc(e.title)}</span>`).join("");
+  $(ids.list).innerHTML = timed.length ? timed.map(e => eventRow(e, now)).join("")
+    : `<div class="py-4 text-muted">${allDay.length ? "Nessun impegno con orario." : "Niente in calendario."}</div>`;
+  $(ids.count).textContent = events.length || "";
+}
+
+const forecastText = d => { const f = forecast(d); return f ? `${f.text}, ${f.min}°–${f.max}°` : ""; };
+
+// Meteo adesso, sotto l'orologio. Se non è configurato non compare.
+function renderWeather() {
   const w = data.weather;
   if (!w || !w.now) {
     $("weather").innerHTML = w?.error ? `<span class="text-[13px] text-muted">${esc(w.error)}</span>` : "";
-    $("dayWeather").textContent = "";
     return;
   }
   const t = w.days?.[0];
@@ -129,8 +144,24 @@ function renderWeather(day) {
   $("weather").innerHTML = `<span class="font-semibold tabular-nums">${w.now.temp}°</span> ${esc(w.now.text)}
     ${t ? `<span class="block text-[13px] text-muted tabular-nums">${t.min}°–${t.max}°<span class="hidden md:inline"> · ${esc(w.place)}</span></span>` : ""}`;
   if (w.error) $("weather").title = w.error;  // dato vecchio: l'errore resta visibile al passaggio del mouse
-  const f = forecast(day);
-  $("dayWeather").textContent = f ? `${f.text}, ${f.min}°–${f.max}°` : "";
+}
+
+// Il riepilogo della settimana nel Calendario: una riga per giorno, toccala per aprirlo.
+function renderWeekList(now) {
+  const today = dayStart(now);
+  let html = "";
+  for (let i = 0; i < DAYS; i++) {
+    const d = addDays(today, i), { events, timed } = split(d);
+    const what = events.length ? `${events.length} ${events.length === 1 ? "impegno" : "impegni"}`
+      + (timed.length ? `, il primo alle ${hm(timed[0].s)}` : "") : "Libero";
+    const name = `${dayName(i, d)} ${i > 1 ? d.getDate() : ""}`;
+    html += `<button type="button" data-i="${i}" aria-pressed="${i === sel}"
+      class="grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3 py-3 text-left ${i < DAYS - 1 ? "border-b border-rule" : ""}">
+      <span><span class="font-semibold ${i === 0 ? "text-today" : ""}">${name}</span>
+        <span class="block text-[13px] text-muted">${what}</span></span>
+      <span class="text-[13px] text-muted tabular-nums">${esc(forecastText(d))}</span></button>`;
+  }
+  $("weekList").innerHTML = html;
 }
 
 function renderReminders(now) {
@@ -177,34 +208,7 @@ function renderReminders(now) {
   return groups;
 }
 
-function render() {
-  const now = new Date();
-  const day = addDays(dayStart(now), sel), isToday = sel === 0;
-  $("date").textContent = cap(day.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" }));
-  $("clock").textContent = hm(now);
-  renderWeek(now);
-  if (!data) return;
-
-  $("alerts").innerHTML = (data.errors || []).map(notice).join("");
-  if (data.demo) $("date").innerHTML += `<span class="${PILL} ${TAG.gray} ml-2.5 align-[6px]">Demo</span>`;
-
-  // Il giorno scelto
-  const events = eventsOn(day);
-  const allDay = events.filter(e => e.all_day), timed = events.filter(e => !e.all_day);
-  $("dayLabel").textContent = dayName(sel, day);
-  $("allDay").innerHTML = allDay.map(e => `<span class="${PILL} ${color(e.color)}">${esc(e.title)}</span>`).join("");
-  $("dayList").innerHTML = timed.length ? timed.map(e => eventRow(e, isToday ? now : null)).join("")
-    : `<div class="py-4 text-muted">${allDay.length ? "Nessun impegno con orario." : "Niente in calendario."}</div>`;
-  $("countDay").textContent = events.length || "";
-
-  $("nowCard").hidden = !isToday;  // "adesso" ha senso solo oggi
-  if (isToday) renderNow(timed, now);
-  renderStrip(timed, now, day, isToday);
-  $("daySection").hidden = !isToday && !timed.length;  // un giorno futuro senza orari: niente scheda vuota
-  renderWeather(day);
-  const groups = renderReminders(now);  // i promemoria sono sempre gli stessi, qualunque giorno guardi
-
-  // Riepilogo sotto il titolo
+function summary(day, isToday, timed, groups, now) {
   const bits = [];
   if (isToday) {
     const left = timed.filter(e => e.e > now).length;
@@ -219,11 +223,56 @@ function render() {
     const f = forecast(day);
     if (f && f.rain >= 50) bits.push(`pioggia probabile (${f.rain}%)`);
   }
-  $("summary").textContent = bits.join(" · ");
+  return bits.join(" · ");
+}
+
+function render() {
+  const now = new Date(), today = dayStart(now);
+  // la Home guarda sempre oggi, il Calendario il giorno scelto
+  const day = view === "home" ? today : addDays(today, sel), isToday = day.getTime() === today.getTime();
+  $("date").textContent = cap(day.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" }));
+  $("clock").textContent = hm(now);
+  if (view === "cal") renderWeek(now);
+  if (!data) return;
+
+  $("alerts").innerHTML = (data.errors || []).map(notice).join("");
+  if (data.demo) $("date").innerHTML += `<span class="${PILL} ${TAG.gray} ml-2.5 align-[6px]">Demo</span>`;
+  renderWeather();
+  const groups = renderReminders(now);
+  const d = split(day);
+
+  if (view === "home") {
+    renderNow($("hNow"), d.timed, now);
+    renderStrip($("hStrip"), d.timed, now, day, true);
+    renderList({ allDay: "hAllDay", list: "hList", count: "hCount" }, d, now);
+    $("hWeather").textContent = forecastText(day);
+  } else {
+    renderStrip($("cStrip"), d.timed, now, day, isToday);
+    $("cDay").hidden = !d.timed.length;  // un giorno senza orari: niente scheda vuota
+    renderList({ allDay: "cAllDay", list: "cList", count: "cCount" }, d, isToday ? now : null);
+    $("cLabel").textContent = dayName(sel, day);
+    $("cWeather").textContent = forecastText(day);
+    renderWeekList(now);
+  }
+  $("summary").textContent = summary(day, isToday, d.timed, groups, now);
 
   const ru = data.reminders_updated_at ? new Date(data.reminders_updated_at) : null;
   $("updated").textContent = `Calendario aggiornato alle ${hm(new Date(data.now))}` +
-    (ru ? ` · promemoria ricevuti ${dayStart(ru).getTime() === dayStart(now).getTime() ? "alle " + hm(ru) : ru.toLocaleDateString("it-IT") + " " + hm(ru)}` : "");
+    (ru ? ` · promemoria ricevuti ${dayStart(ru).getTime() === today.getTime() ? "alle " + hm(ru) : ru.toLocaleDateString("it-IT") + " " + hm(ru)}` : "");
+}
+
+// Le due schermate stanno nella stessa pagina: l'indirizzo dopo # dice quale mostrare.
+// Così funzionano il tasto indietro e i preferiti, senza bisogno di un framework.
+function route() {
+  view = location.hash === "#/calendario" ? "cal" : "home";
+  $("viewHome").hidden = view !== "home";
+  $("viewCal").hidden = view !== "cal";
+  for (const a of document.querySelectorAll("[data-view]")) {  // il link della schermata aperta è evidenziato
+    if (a.dataset.view === view) a.setAttribute("aria-current", "page");
+    else a.removeAttribute("aria-current");
+  }
+  scrollTo(0, 0);
+  render();
 }
 
 // Cambia giorno, con un piccolo scorrimento nella direzione giusta.
@@ -234,7 +283,7 @@ function select(i) {
   sel = i;
   render();
   if (!matchMedia("(prefers-reduced-motion: reduce)").matches)
-    $("dayView").animate([{ opacity: 0, transform: `translateX(${dir * 16}px)` }, { opacity: 1, transform: "none" }],
+    $("calBody").animate([{ opacity: 0, transform: `translateX(${dir * 16}px)` }, { opacity: 1, transform: "none" }],
       { duration: 220, easing: "ease-out" });
 }
 
@@ -264,24 +313,26 @@ const today0 = new Date();
 $("splashMonth").textContent = today0.toLocaleDateString("it-IT", { month: "short" }).replace(".", "");
 $("splashDay").textContent = today0.getDate();
 
-// Tre modi per cambiare giorno: tocco sulla linguetta, frecce della tastiera, scorrimento col dito.
-$("week").onclick = e => { const b = e.target.closest("button"); if (b) select(+b.dataset.i); };
+// Nel Calendario, tre modi per cambiare giorno: tocco sulla linguetta (o sulla riga della settimana),
+// frecce della tastiera, scorrimento col dito.
+$("week").onclick = $("weekList").onclick = e => { const b = e.target.closest("button"); if (b) select(+b.dataset.i); };
 addEventListener("keydown", e => {
-  if (e.altKey || e.ctrlKey || e.metaKey) return;
+  if (view !== "cal" || e.altKey || e.ctrlKey || e.metaKey) return;
   if (e.key === "ArrowRight") select(sel + 1);
   if (e.key === "ArrowLeft") select(sel - 1);
 });
 let touch = null;
 addEventListener("touchstart", e => { const t = e.touches[0]; touch = { x: t.clientX, y: t.clientY }; }, { passive: true });
 addEventListener("touchend", e => {
-  if (!touch) return;
+  if (!touch || view !== "cal") return;
   const t = e.changedTouches[0], dx = t.clientX - touch.x, dy = t.clientY - touch.y;
   touch = null;
   if (Math.abs(dx) > 60 && Math.abs(dx) > 1.5 * Math.abs(dy)) select(sel + (dx < 0 ? 1 : -1));  // orizzontale, non scroll
 }, { passive: true });
 
 $("refresh").onclick = () => load(true);
-render();                            // data e orologio subito, senza aspettare il server
+addEventListener("hashchange", route);
+route();                             // sceglie la schermata e disegna subito data e orologio, senza aspettare il server
 load();
 setInterval(render, 15000);          // aggiorna orologio e "adesso"
 addEventListener("resize", render);   // la barra della giornata ricalcola le etichette delle ore

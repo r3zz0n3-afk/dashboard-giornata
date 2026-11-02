@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
@@ -32,7 +32,15 @@
   </div>
   <div class="text-muted">Caricamento<span aria-hidden="true" class="*:opacity-0 *:animate-dot [&>:nth-child(2)]:[animation-delay:.2s] [&>:nth-child(3)]:[animation-delay:.4s]"><span>.</span><span>.</span><span>.</span></span></div>
 </div>
-<main aria-busy="true" class="mx-auto max-w-[1100px] px-4 pt-6 pb-8 md:px-8 md:pt-12 md:pb-10">
+<main aria-busy="true" class="mx-auto max-w-[1100px] px-4 pt-6 pb-28 md:px-8 md:pt-8 md:pb-10">
+  <!-- Da computer: il controllo segmentato di Apple per scegliere la schermata (sul telefono la barra è in basso) -->
+  <nav aria-label="Schermate" class="mb-8 hidden md:flex">
+    <div class="inline-flex gap-0.5 rounded-full bg-active p-1">
+      <a href="#/" data-view="home" class="block h-8 rounded-full px-4 text-sm/8 font-semibold text-muted transition-colors hover:text-ink aria-[current=page]:bg-surface aria-[current=page]:text-ink">Home</a>
+      <a href="#/calendario" data-view="cal" class="block h-8 rounded-full px-4 text-sm/8 font-semibold text-muted transition-colors hover:text-ink aria-[current=page]:bg-surface aria-[current=page]:text-ink">Calendario</a>
+    </div>
+  </nav>
+
   <!-- titolo: la data a sinistra, l'ora sottile a destra come sulla schermata di blocco dell'iPhone -->
   <header class="flex items-start justify-between gap-4">
     <div>
@@ -45,36 +53,52 @@
     </div>
   </header>
 
-  <!-- Una linguetta per ogni giorno della settimana: tocca, scorri col dito o usa le frecce ← → -->
-  <nav id="week" aria-label="Scegli il giorno" class="mt-5 grid grid-cols-7 md:mt-7 md:gap-1"></nav>
-
   <div id="alerts"></div>
 
-  <div id="dayView">
-    <section id="daySection" aria-label="Adesso e la giornata" class="card mt-5 p-4 md:p-5 [body:not(.loading)_&]:animate-appear">
-      <div id="nowCard" class="mb-5 grid gap-1"></div>
-      <div id="strip" aria-hidden="true" class="relative"></div>
+  <!-- HOME: la dashboard principale. Oggi, i promemoria e, nei prossimi passi, esami, Spotify e notifiche. -->
+  <div id="viewHome" class="[body:not(.loading)_&]:animate-appear">
+    <section aria-label="Adesso" class="card mt-5 p-4 md:p-5">
+      <div id="hNow" class="mb-5 grid gap-1"></div>
+      <div id="hStrip" aria-hidden="true" class="relative"></div>
     </section>
 
-    <!-- colonne: il giorno a sinistra, i promemoria sempre a destra (sotto, sul telefono) -->
-    <div class="mt-7 grid items-start gap-6 md:mt-8 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] [body:not(.loading)_&]:animate-appear">
+    <div class="mt-7 grid items-start gap-6 md:mt-8 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
       <section>
-        <h2 class="mb-2.5 flex items-baseline gap-2 px-4 text-xl font-semibold tracking-[-.02em] md:px-5">
-          <span id="dayLabel">Oggi</span>
-          <span id="countDay" class="text-[15px] font-normal tracking-normal text-muted tabular-nums"></span>
-          <span id="dayWeather" class="ml-auto text-[13px] font-normal tracking-normal text-muted"></span>
-        </h2>
+        <h2 class="mb-2.5 flex items-baseline gap-2 px-4 text-xl font-semibold tracking-[-.02em] md:px-5">Oggi <span id="hCount" class="text-[15px] font-normal tracking-normal text-muted tabular-nums"></span><span id="hWeather" class="ml-auto text-[13px] font-normal tracking-normal text-muted"></span></h2>
         <div class="card px-4 py-1 md:px-5">
-          <div id="allDay" class="flex flex-wrap gap-1.5 pt-3.5 pb-1 empty:hidden"></div>
-          <div id="dayList"></div>
+          <div id="hAllDay" class="flex flex-wrap gap-1.5 pt-3.5 pb-1 empty:hidden"></div>
+          <div id="hList"></div>
         </div>
       </section>
       <section>
-        <h2 class="mb-2.5 flex items-baseline gap-2 px-4 text-xl font-semibold tracking-[-.02em] md:px-5">
-          Promemoria <span id="countRem" class="text-[15px] font-normal tracking-normal text-muted"></span>
-        </h2>
+        <h2 class="mb-2.5 flex items-baseline gap-2 px-4 text-xl font-semibold tracking-[-.02em] md:px-5">Promemoria <span id="countRem" class="text-[15px] font-normal tracking-normal text-muted tabular-nums"></span></h2>
         <div id="reminders" class="card px-4 py-1 md:px-5"></div>
       </section>
+    </div>
+  </div>
+
+  <!-- CALENDARIO: la settimana un giorno alla volta. Tocca le linguette, scorri col dito o usa le frecce ← → -->
+  <div id="viewCal" hidden class="[body:not(.loading)_&]:animate-appear">
+    <nav id="week" aria-label="Scegli il giorno" class="mt-5 grid grid-cols-7 md:mt-7 md:gap-1"></nav>
+
+    <div id="calBody">
+      <section id="cDay" aria-label="La giornata" class="card mt-5 p-4 md:p-5">
+        <div id="cStrip" aria-hidden="true" class="relative"></div>
+      </section>
+
+      <div class="mt-7 grid items-start gap-6 md:mt-8 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <section>
+          <h2 class="mb-2.5 flex items-baseline gap-2 px-4 text-xl font-semibold tracking-[-.02em] md:px-5"><span id="cLabel">Oggi</span> <span id="cCount" class="text-[15px] font-normal tracking-normal text-muted tabular-nums"></span><span id="cWeather" class="ml-auto text-[13px] font-normal tracking-normal text-muted"></span></h2>
+          <div class="card px-4 py-1 md:px-5">
+            <div id="cAllDay" class="flex flex-wrap gap-1.5 pt-3.5 pb-1 empty:hidden"></div>
+            <div id="cList"></div>
+          </div>
+        </section>
+        <section>
+          <h2 class="mb-2.5 flex items-baseline gap-2 px-4 text-xl font-semibold tracking-[-.02em] md:px-5">La settimana</h2>
+          <div id="weekList" class="card px-4 py-1 md:px-5"></div>
+        </section>
+      </div>
     </div>
   </div>
 
@@ -85,5 +109,17 @@
       transition hover:bg-control active:scale-96 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent md:h-8">Aggiorna</button>
   </footer>
 </main>
+
+<!-- Sul telefono: la barra in basso come nelle app iOS. pb-[env(...)] lascia spazio alla barra di sistema dell'iPhone. -->
+<nav aria-label="Schermate" class="fixed inset-x-0 bottom-0 z-[5] flex border-t border-rule bg-surface pb-[env(safe-area-inset-bottom)] md:hidden">
+  <a href="#/" data-view="home" class="flex flex-1 flex-col items-center gap-0.5 pt-2 pb-1.5 text-[11px] font-semibold text-muted aria-[current=page]:text-ink">
+    <svg viewBox="0 0 24 24" aria-hidden="true" class="size-6 fill-none stroke-current stroke-[1.6] [stroke-linecap:round] [stroke-linejoin:round]"><path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z"/></svg>
+    Home
+  </a>
+  <a href="#/calendario" data-view="cal" class="flex flex-1 flex-col items-center gap-0.5 pt-2 pb-1.5 text-[11px] font-semibold text-muted aria-[current=page]:text-ink">
+    <svg viewBox="0 0 24 24" aria-hidden="true" class="size-6 fill-none stroke-current stroke-[1.6] [stroke-linecap:round] [stroke-linejoin:round]"><rect x="4" y="5.5" width="16" height="14.5" rx="2.5"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/></svg>
+    Calendario
+  </a>
+</nav>
 </body>
 </html>
