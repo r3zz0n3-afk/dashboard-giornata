@@ -198,6 +198,7 @@ async function load(force) {
 }
 
 $("refresh").onclick = () => load(true);
+render();                            // data e orologio subito, senza aspettare il server
 load();
 setInterval(render, 15000);          // aggiorna orologio e "adesso"
 addEventListener("resize", render);   // la barra della giornata ricalcola le etichette delle ore

@@ -9,7 +9,12 @@
 <title>La mia giornata</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<!-- Il font arriva da Google: con media="print" il browser non lo aspetta per disegnare la pagina,
+     poi onload lo attiva. Intanto si vede il font di sistema (su iPhone San Francisco). -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      media="print" onload="this.media='all'">
+<!-- Il colore di fondo è qui dentro, così è giusto fin dal primo istante, anche prima che arrivi style.css. -->
+<style>html{background:#fff}@media (prefers-color-scheme:dark){html{background:#191919}}</style>
 <link rel="stylesheet" href="css/style.css">
 <link rel="apple-touch-icon" href="img/icon.png">
 <link rel="manifest" href="manifest.json">
