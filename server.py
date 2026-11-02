@@ -6,6 +6,8 @@ import threading
 import time
 from datetime import date, datetime, timedelta, time as dtime
 from pathlib import Path
+from urllib.parse import urlencode
+from urllib.request import urlopen
 from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
@@ -22,6 +24,8 @@ CALENDARS = [c.strip().lower() for c in os.getenv("CALENDARS", "").split(",") if
 TOKEN = os.getenv("REMINDERS_TOKEN", "").strip()
 DEMO = os.getenv("DEMO", "0").strip() == "1"
 CACHE_SECONDS = int(os.getenv("CACHE_SECONDS", "300"))
+WEATHER_CITY = os.getenv("WEATHER_CITY", "").strip()
+WEATHER_SECONDS = int(os.getenv("WEATHER_SECONDS", "900"))
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "8080"))
 
@@ -133,6 +137,71 @@ def get_events(day: date):
         return events, err
 
 
+# ---------------------------------------------------------------- meteo
+# Open-Meteo: gratuito, senza chiave. Prima trova le coordinate della città, poi chiede le previsioni.
+WMO = {  # codici meteo WMO -> descrizione
+    0: "Sereno", 1: "Quasi sereno", 2: "Poco nuvoloso", 3: "Nuvoloso", 45: "Nebbia", 48: "Nebbia gelata",
+    51: "Pioviggine leggera", 53: "Pioviggine", 55: "Pioviggine intensa", 56: "Pioviggine gelata", 57: "Pioviggine gelata",
+    61: "Pioggia leggera", 63: "Pioggia", 65: "Pioggia forte", 66: "Pioggia gelata", 67: "Pioggia gelata",
+    71: "Neve leggera", 73: "Neve", 75: "Neve forte", 77: "Nevischio",
+    80: "Rovesci leggeri", 81: "Rovesci", 82: "Rovesci violenti", 85: "Rovesci di neve", 86: "Rovesci di neve",
+    95: "Temporale", 96: "Temporale con grandine", 99: "Temporale con grandine",
+}
+_weather = {"at": 0.0, "data": None, "place": None}
+_wlock = threading.Lock()  # lucchetto separato: il meteo non blocca il calendario
+
+
+def _get_json(url, params):
+    with urlopen(f"{url}?{urlencode(params)}", timeout=10) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+def fetch_weather():
+    if _weather["place"] is None:
+        res = _get_json("https://geocoding-api.open-meteo.com/v1/search",
+                        {"name": WEATHER_CITY, "count": 1, "language": "it"}).get("results")
+        if not res:
+            raise ValueError(f"città «{WEATHER_CITY}» non trovata")
+        _weather["place"] = res[0]
+    place = _weather["place"]
+    f = _get_json("https://api.open-meteo.com/v1/forecast", {
+        "latitude": place["latitude"], "longitude": place["longitude"], "timezone": str(TZ), "forecast_days": 2,
+        "current": "temperature_2m,weather_code",
+        "hourly": "precipitation_probability",
+        "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
+    })
+    day = lambda i: {"text": WMO.get(f["daily"]["weather_code"][i], "—"),
+                     "max": round(f["daily"]["temperature_2m_max"][i]),
+                     "min": round(f["daily"]["temperature_2m_min"][i]),
+                     "rain": f["daily"]["precipitation_probability_max"][i]}
+    # prima ora da adesso a fine giornata con pioggia probabile (>= 50%)
+    now_h, today = datetime.now(TZ).strftime("%Y-%m-%dT%H:00"), datetime.now(TZ).date().isoformat()
+    rain = next(({"from": t[11:16], "prob": p}
+                 for t, p in zip(f["hourly"]["time"], f["hourly"]["precipitation_probability"])
+                 if t.startswith(today) and t >= now_h and (p or 0) >= 50), None)
+    return {"place": place["name"],
+            "now": {"temp": round(f["current"]["temperature_2m"]), "text": WMO.get(f["current"]["weather_code"], "—")},
+            "today": day(0), "tomorrow": day(1), "rain": rain}
+
+
+def get_weather():
+    if not WEATHER_CITY:
+        return None  # meteo non configurato: la pagina non lo mostra
+    if DEMO:
+        return {"place": WEATHER_CITY, "now": {"temp": 14, "text": "Poco nuvoloso"},
+                "today": {"text": "Rovesci", "max": 17, "min": 9, "rain": 70},
+                "tomorrow": {"text": "Sereno", "max": 16, "min": 7, "rain": 0}, "rain": {"from": "16:00", "prob": 70}}
+    with _wlock:
+        if time.time() - _weather["at"] < WEATHER_SECONDS and _weather["data"]:
+            return _weather["data"]
+        try:
+            data = fetch_weather()
+        except Exception as exc:  # tiene l'ultimo dato valido e segnala l'errore solo nel riquadro meteo
+            data = dict(_weather["data"] or {}, error=f"Meteo non disponibile: {exc}")
+        _weather.update(at=time.time(), data=data)
+        return data
+
+
 # ---------------------------------------------------------------- promemoria
 def _parse_due(s: str):
     s = (s or "").strip()
@@ -219,6 +288,7 @@ def api_dashboard():
         "events": events,
         "reminders": rem.get("items", []),
         "reminders_updated_at": rem.get("updated_at"),
+        "weather": get_weather(),
         "errors": [e for e in [err] if e],
         "demo": DEMO,
     })

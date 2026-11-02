@@ -60,6 +60,20 @@ Se qualcosa non va, l'errore compare in rosso in cima alla dashboard.
 
 ---
 
+## Meteo
+
+Il meteo arriva da [Open-Meteo](https://open-meteo.com), che è gratuito e non richiede registrazione.
+Nel file `.env` scrivi la tua città:
+```
+WEATHER_CITY=Bologna
+```
+poi esegui `systemctl --user restart dashboard-giornata`. Se lasci il campo vuoto, il meteo non viene mostrato.
+
+La dashboard mostra la temperatura e il cielo sotto l'orologio, avvisa nel riepilogo se oggi è probabile che piova
+e aggiunge le previsioni di domani accanto al titolo "Domani".
+
+---
+
 ## 3. Collegare i Promemoria (Comando Rapido su iPhone)
 
 Apple non permette di leggere i Promemoria da fuori. Per questo è l'iPhone a **inviarli** al PC.

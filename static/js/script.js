@@ -83,6 +83,22 @@ function renderNow(timed, now) {
   }
 }
 
+// Meteo: adesso sotto l'orologio, domani accanto al titolo "Domani". Se non è configurato non compare.
+function renderWeather() {
+  const w = data.weather;
+  if (!w || !w.now) {
+    $("weather").innerHTML = w?.error ? `<span class="err">${esc(w.error)}</span>` : "";
+    $("tomWeather").textContent = "";
+    return;
+  }
+  const t = w.today;
+  $("weather").innerHTML = `<span class="temp num">${w.now.temp}°</span> ${esc(w.now.text)}
+    <span class="range num">${t.min}°–${t.max}°<span class="place"> · ${esc(w.place)}</span></span>`;
+  if (w.error) $("weather").title = w.error;  // dato vecchio: l'errore resta visibile al passaggio del mouse
+  const d = w.tomorrow;
+  $("tomWeather").textContent = d ? `${d.text}, ${d.min}°–${d.max}°` : "";
+}
+
 function render() {
   const now = new Date();
   $("date").textContent = cap(now.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" }));
@@ -102,6 +118,7 @@ function render() {
 
   renderNow(timed, now);
   renderStrip(timed, now);
+  renderWeather();
 
   // Promemoria
   const tStart = dayStart(now), tEnd = addDays(tStart, 1);
@@ -154,6 +171,8 @@ function render() {
   const bits = [left ? `${left} ${left === 1 ? "impegno" : "impegni"} ancora da fare` : "Nessun altro impegno oggi"];
   if (groups.overdue.length) bits.push(`${groups.overdue.length} promemoria scadut${groups.overdue.length === 1 ? "o" : "i"}`);
   if (groups.today.length) bits.push(`${groups.today.length} promemoria per oggi`);
+  const rain = data.weather?.rain;
+  if (rain) bits.push(`pioggia probabile dalle ${rain.from} (${rain.prob}%)`);
   $("summary").textContent = bits.join(" · ");
 
   const ru = data.reminders_updated_at ? new Date(data.reminders_updated_at) : null;
