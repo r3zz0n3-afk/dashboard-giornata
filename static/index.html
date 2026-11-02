@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#191919" media="(prefers-color-scheme: dark)">
+<title>La mia giornata</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="css/style.css">
+<link rel="apple-touch-icon" href="img/icon.png">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="img/icon.png">
+<script src="js/script.js" defer></script>
+</head>
+<body>
+<main class="page">
+  <header class="title-row">
+    <div>
+      <h1 id="date"></h1>
+      <p class="summary" id="summary"></p>
+    </div>
+    <div class="clock num" id="clock"></div>
+  </header>
+
+  <div id="alerts"></div>
+
+  <section class="day" aria-label="Adesso e la giornata">
+    <div class="callout" id="nowCard"></div>
+    <div class="strip" id="strip" aria-hidden="true"></div>
+  </section>
+
+  <div class="cols">
+    <section class="block">
+      <h2>Oggi <span class="count num" id="countToday"></span></h2>
+      <div id="allDay" class="tags"></div>
+      <div id="today"></div>
+    </section>
+    <div class="side">
+      <section class="block">
+        <h2>Promemoria <span class="count" id="countRem"></span></h2>
+        <div id="reminders"></div>
+      </section>
+      <section class="block">
+        <h2>Domani <span class="count num" id="countTom"></span></h2>
+        <div id="tomorrow"></div>
+      </section>
+    </div>
+  </div>
+
+  <footer>
+    <span id="updated"></span>
+    <button id="refresh" type="button">Aggiorna</button>
+  </footer>
+</main>
+</body>
+</html>

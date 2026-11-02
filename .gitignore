@@ -1,0 +1,13 @@
+# impostazioni personali e password: non vanno mai su GitHub
+.env
+
+# ambiente Python e file generati
+.venv/
+__pycache__/
+*.pyc
+
+# dati personali ricevuti dall'iPhone
+data/
+
+# file di prova della taste-skill
+.taste-skill/

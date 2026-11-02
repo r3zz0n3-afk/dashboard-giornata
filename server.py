@@ -1,0 +1,257 @@
+#!/usr/bin/env python3
+"""Dashboard giornata: calendario iCloud (CalDAV) + Promemoria (via Comando Rapido iPhone)."""
+import json
+import os
+import threading
+import time
+from datetime import date, datetime, timedelta, time as dtime
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+from dotenv import load_dotenv
+from flask import Flask, abort, jsonify, request, send_from_directory
+
+BASE = Path(__file__).resolve().parent
+load_dotenv(BASE / ".env")
+
+TZ = ZoneInfo(os.getenv("TIMEZONE", "Europe/Rome"))
+APPLE_ID = os.getenv("APPLE_ID", "").strip()
+APP_PASSWORD = os.getenv("APPLE_APP_PASSWORD", "").strip()
+CALDAV_URL = os.getenv("CALDAV_URL", "https://caldav.icloud.com").strip()
+CALENDARS = [c.strip().lower() for c in os.getenv("CALENDARS", "").split(",") if c.strip()]
+TOKEN = os.getenv("REMINDERS_TOKEN", "").strip()
+DEMO = os.getenv("DEMO", "0").strip() == "1"
+CACHE_SECONDS = int(os.getenv("CACHE_SECONDS", "300"))
+HOST = os.getenv("HOST", "0.0.0.0")
+PORT = int(os.getenv("PORT", "8080"))
+
+DATA = BASE / "data"
+DATA.mkdir(exist_ok=True)
+REM_FILE = DATA / "reminders.json"
+
+# colori dei tag di Notion: la pagina li traduce in classi CSS (c-blue, c-orange, ...)
+PALETTE = ["blue", "orange", "green", "pink", "yellow", "brown", "red", "gray"]
+
+app = Flask(__name__, static_folder=None)
+_cache = {"key": None, "at": 0.0, "events": [], "error": None}
+_lock = threading.Lock()
+
+
+# ---------------------------------------------------------------- calendario
+def _local(v):
+    """Ritorna (datetime locale, è_giornata_intera)."""
+    if isinstance(v, datetime):
+        if v.tzinfo is None:
+            v = v.replace(tzinfo=TZ)
+        return v.astimezone(TZ), False
+    return datetime.combine(v, dtime.min, TZ), True
+
+
+def fetch_caldav(day: date, days: int = 2):
+    import caldav  # import qui così la modalità demo non lo richiede
+
+    start = datetime.combine(day, dtime.min, TZ)
+    end = start + timedelta(days=days)
+    client = caldav.DAVClient(url=CALDAV_URL, username=APPLE_ID, password=APP_PASSWORD)
+    principal = client.principal()
+    events = []
+    for i, cal in enumerate(principal.calendars()):
+        try:
+            name = cal.get_display_name() or "Calendario"
+        except Exception:
+            name = getattr(cal, "name", None) or "Calendario"
+        if CALENDARS and name.lower() not in CALENDARS:
+            continue
+        try:
+            results = cal.search(start=start, end=end, event=True, expand=True)
+        except Exception:
+            continue  # calendari che non supportano eventi (es. vecchi promemoria)
+        for r in results:
+            for comp in r.icalendar_instance.walk("VEVENT"):
+                ds = comp.get("DTSTART")
+                if ds is None:
+                    continue
+                s, all_day = _local(ds.dt)
+                de = comp.get("DTEND")
+                if de is not None:
+                    e, _ = _local(de.dt)
+                elif comp.get("DURATION") is not None:
+                    e = s + comp.get("DURATION").dt
+                else:
+                    e = s + (timedelta(days=1) if all_day else timedelta(hours=1))
+                if e <= start or s >= end:
+                    continue
+                events.append({
+                    "title": str(comp.get("SUMMARY", "(senza titolo)")),
+                    "start": s.isoformat(),
+                    "end": e.isoformat(),
+                    "all_day": all_day,
+                    "location": str(comp.get("LOCATION", "") or ""),
+                    "calendar": name,
+                    "color": PALETTE[i % len(PALETTE)],
+                })
+    events.sort(key=lambda ev: (not ev["all_day"], ev["start"]))
+    return events
+
+
+def demo_events(day: date):
+    def at(d, h, m=0):
+        return datetime.combine(d, dtime(h, m), TZ).isoformat()
+
+    tom = day + timedelta(days=1)
+    return [
+        {"title": "Consegna progetto", "start": at(day, 0), "end": at(tom, 0), "all_day": True,
+         "location": "", "calendar": "Università", "color": PALETTE[0]},
+        {"title": "Lezione di Analisi", "start": at(day, 9), "end": at(day, 11), "all_day": False,
+         "location": "Aula 3", "calendar": "Università", "color": PALETTE[0]},
+        {"title": "Pranzo con Marco", "start": at(day, 13), "end": at(day, 14), "all_day": False,
+         "location": "Centro", "calendar": "Personale", "color": PALETTE[2]},
+        {"title": "Studio di gruppo", "start": at(day, 15, 30), "end": at(day, 17, 30), "all_day": False,
+         "location": "Biblioteca", "calendar": "Università", "color": PALETTE[0]},
+        {"title": "Palestra", "start": at(day, 19), "end": at(day, 20), "all_day": False,
+         "location": "", "calendar": "Personale", "color": PALETTE[2]},
+        {"title": "Ricevimento professore", "start": at(tom, 10), "end": at(tom, 10, 30), "all_day": False,
+         "location": "Studio 12", "calendar": "Università", "color": PALETTE[0]},
+        {"title": "Cena di compleanno", "start": at(tom, 20, 30), "end": at(tom, 23), "all_day": False,
+         "location": "", "calendar": "Personale", "color": PALETTE[2]},
+    ]
+
+
+def get_events(day: date):
+    if DEMO:
+        return demo_events(day), None
+    if not APPLE_ID or not APP_PASSWORD:
+        return [], "Calendario non configurato: imposta APPLE_ID e APPLE_APP_PASSWORD nel file .env"
+    with _lock:
+        if _cache["key"] == day.isoformat() and time.time() - _cache["at"] < CACHE_SECONDS:
+            return _cache["events"], _cache["error"]
+        try:
+            events, err = fetch_caldav(day), None
+        except Exception as exc:  # mostra l'errore nella pagina, tiene gli ultimi dati validi
+            events, err = _cache["events"], f"Errore calendario iCloud: {exc}"
+        _cache.update(key=day.isoformat(), at=time.time(), events=events, error=err)
+        return events, err
+
+
+# ---------------------------------------------------------------- promemoria
+def _parse_due(s: str):
+    s = (s or "").strip()
+    if not s:
+        return None, False
+    try:
+        if len(s) == 10:  # solo data
+            return datetime.combine(date.fromisoformat(s), dtime.min, TZ), True
+        d = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=TZ)
+        return d.astimezone(TZ), False
+    except ValueError:
+        return None, False
+
+
+def parse_reminders(payload):
+    """Accetta {"text": "titolo|scadenza|lista\\n..."}, {"reminders": [...]} oppure testo semplice."""
+    items = []
+    if isinstance(payload, dict) and isinstance(payload.get("reminders"), list):
+        raw = payload["reminders"]
+        for r in raw:
+            if isinstance(r, str):
+                r = {"title": r}
+            items.append((str(r.get("title", "")), str(r.get("due", "") or ""), str(r.get("list", "") or "")))
+    else:
+        text = payload.get("text", "") if isinstance(payload, dict) else str(payload or "")
+        for line in str(text).splitlines():
+            parts = [p.strip() for p in line.split("|")]
+            items.append((parts[0], parts[1] if len(parts) > 1 else "", parts[2] if len(parts) > 2 else ""))
+    out = []
+    for title, due, lst in items:
+        title = title.strip()
+        if not title:
+            continue
+        d, date_only = _parse_due(due)
+        out.append({"title": title, "due": d.isoformat() if d else None,
+                    "date_only": date_only, "list": lst})
+    return out
+
+
+def load_reminders():
+    if DEMO and not REM_FILE.exists():
+        today = datetime.now(TZ).date()
+        mk = lambda d, h=None: (datetime.combine(d, dtime(h or 0), TZ).isoformat(), h is None)
+        demo = [("Pagare la bolletta", today - timedelta(days=1), 18, "Casa"),
+                ("Ripassare capitolo 4", today, None, "Università"),
+                ("Chiamare il dentista", today, 17, "Personale"),
+                ("Comprare il latte", None, None, "Spesa")]
+        items = []
+        for t, d, h, l in demo:
+            due, only = mk(d, h) if d else (None, False)
+            items.append({"title": t, "due": due, "date_only": only, "list": l})
+        return {"updated_at": datetime.now(TZ).isoformat(), "items": items}
+    if not REM_FILE.exists():
+        return {"updated_at": None, "items": []}
+    try:
+        return json.loads(REM_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"updated_at": None, "items": []}
+
+
+# ---------------------------------------------------------------- rotte
+@app.get("/")
+def index():
+    return send_from_directory(BASE / "static", "index.html")
+
+
+@app.get("/<path:filename>")
+def static_files(filename):
+    # consegna qualsiasi file dentro static/ (icone, manifest, immagini...)
+    # send_from_directory blocca i tentativi di uscire dalla cartella (es. /../.env)
+    return send_from_directory(BASE / "static", filename)
+
+
+@app.get("/api/dashboard")
+def api_dashboard():
+    today = datetime.now(TZ).date()
+    events, err = get_events(today)
+    rem = load_reminders()
+    return jsonify({
+        "now": datetime.now(TZ).isoformat(),
+        "today": today.isoformat(),
+        "events": events,
+        "reminders": rem.get("items", []),
+        "reminders_updated_at": rem.get("updated_at"),
+        "errors": [e for e in [err] if e],
+        "demo": DEMO,
+    })
+
+
+@app.post("/api/reminders")
+def api_reminders():
+    if not TOKEN:
+        abort(503, "REMINDERS_TOKEN non impostato nel file .env")
+    sent = request.headers.get("Authorization", "").removeprefix("Bearer ").strip() \
+        or request.args.get("token", "")
+    if sent != TOKEN:
+        abort(401)
+    payload = request.get_json(silent=True)
+    if payload is None:
+        payload = request.get_data(as_text=True)
+    items = parse_reminders(payload)
+    data = {"updated_at": datetime.now(TZ).isoformat(), "items": items}
+    tmp = REM_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp.replace(REM_FILE)
+    return jsonify({"ok": True, "ricevuti": len(items)})
+
+
+@app.post("/api/refresh")
+def api_refresh():
+    with _lock:
+        _cache["at"] = 0.0
+    return jsonify({"ok": True})
+
+
+if __name__ == "__main__":
+    from waitress import serve
+
+    print(f"Dashboard su http://{HOST}:{PORT}  (demo={'sì' if DEMO else 'no'})")
+    serve(app, host=HOST, port=PORT)
