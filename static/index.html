@@ -62,6 +62,12 @@
       <div id="hStrip" aria-hidden="true" class="relative"></div>
     </section>
 
+    <!-- Esami: il conto alla rovescia, dal calendario indicato in EXAMS nel file .env. Sul telefono le schede scorrono di lato. -->
+    <section id="exams" hidden class="mt-7 md:mt-8">
+      <h2 class="mb-2.5 flex items-baseline gap-2 px-4 text-xl font-semibold tracking-[-.02em] md:px-5">Esami <span id="examCount" class="text-[15px] font-normal tracking-normal text-muted tabular-nums"></span></h2>
+      <div id="examList" class="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 [scrollbar-width:none] md:mx-0 md:grid md:grid-cols-4 md:overflow-visible md:px-0"></div>
+    </section>
+
     <div class="mt-7 grid items-start gap-6 md:mt-8 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
       <section>
         <h2 class="mb-2.5 flex items-baseline gap-2 px-4 text-xl font-semibold tracking-[-.02em] md:px-5">Oggi <span id="hCount" class="text-[15px] font-normal tracking-normal text-muted tabular-nums"></span><span id="hWeather" class="ml-auto text-[13px] font-normal tracking-normal text-muted"></span></h2>

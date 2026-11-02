@@ -4,6 +4,7 @@ Una pagina web con due schermate, che si scelgono dalla barra in basso sul telef
 
 **Home**, la dashboard della giornata:
 - **Adesso / Prossimo**: cosa stai facendo e cosa viene dopo, con il tempo che manca, sulla barra delle ore di oggi.
+- **Esami**: il conto alla rovescia ai prossimi esami, presi da un calendario apposta.
 - **Oggi**: gli eventi del calendario Apple (iCloud), con quelli passati sbiaditi.
 - **Promemoria**: quelli scaduti, quelli di oggi, i prossimi e quelli senza data.
 
@@ -77,6 +78,22 @@ poi esegui `systemctl --user restart dashboard-giornata`. Se lasci il campo vuot
 
 La dashboard mostra la temperatura e il cielo sotto l'orologio e avvisa nel riepilogo se è probabile che piova.
 Per ogni giorno della settimana mostra le previsioni accanto al titolo del giorno.
+
+---
+
+## Esami
+
+Crea su iCloud un calendario solo per gli esami (ad esempio "Esami uni") e aggiungi lì ogni esame, come un evento normale.
+Nel file `.env` scrivi il nome del calendario:
+```
+EXAMS=Esami uni
+```
+poi esegui `systemctl --user restart dashboard-giornata`. Se hai più calendari di esami, separali con la virgola.
+
+La Home mostra una scheda per esame, con i giorni che mancano: in rosso quando manca meno di una settimana.
+Se il titolo inizia con "Esame" o "Esame di", la scheda lo toglie (nella scheda Esami sarebbe ripetuto).
+Gli esami vengono cercati nei prossimi 180 giorni e richiesti a iCloud ogni mezz'ora; il pulsante Aggiorna li richiede subito.
+Per guardare più avanti: `EXAM_DAYS=365`.
 
 ---
 

@@ -29,6 +29,9 @@ WEATHER_SECONDS = int(os.getenv("WEATHER_SECONDS", "900"))
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "8080"))
 DAYS = 7  # giorni mostrati nella pagina: oggi e i 6 successivi
+EXAMS = [c.strip().lower() for c in os.getenv("EXAMS", "").split(",") if c.strip()]  # calendari degli esami
+EXAM_DAYS = int(os.getenv("EXAM_DAYS", "180"))  # quanto avanti cercare gli esami
+EXAM_SECONDS = int(os.getenv("EXAM_SECONDS", "1800"))  # gli esami cambiano di rado: li richiede ogni mezz'ora
 
 DATA = BASE / "data"
 DATA.mkdir(exist_ok=True)
@@ -52,7 +55,8 @@ def _local(v):
     return datetime.combine(v, dtime.min, TZ), True
 
 
-def fetch_caldav(day: date, days: int = DAYS):
+def fetch_caldav(day: date, days: int = DAYS, only=None):
+    """Eventi da `day` per `days` giorni. `only`: nomi dei calendari da leggere (di default CALENDARS)."""
     import caldav  # import qui così la modalità demo non lo richiede
 
     start = datetime.combine(day, dtime.min, TZ)
@@ -65,7 +69,8 @@ def fetch_caldav(day: date, days: int = DAYS):
             name = cal.get_display_name() or "Calendario"
         except Exception:
             name = getattr(cal, "name", None) or "Calendario"
-        if CALENDARS and name.lower() not in CALENDARS:
+        only = CALENDARS if only is None else only
+        if only and name.lower() not in only:
             continue
         try:
             results = cal.search(start=start, end=end, event=True, expand=True)
@@ -140,6 +145,36 @@ def get_events(day: date):
             events, err = _cache["events"], f"Errore calendario iCloud: {exc}"
         _cache.update(key=day.isoformat(), at=time.time(), events=events, error=err)
         return events, err
+
+
+# ---------------------------------------------------------------- esami
+# Gli esami sono gli eventi dei calendari scritti in EXAMS (es. EXAMS=Esami uni), cercati nei prossimi EXAM_DAYS giorni.
+_exams = {"at": 0.0, "items": [], "error": None}
+_elock = threading.Lock()
+
+
+def demo_exams(day: date):
+    def at(n, h):
+        return datetime.combine(day + timedelta(days=n), dtime(h), TZ).isoformat()
+    return [{"title": t, "start": at(n, h), "end": at(n, h + 2), "all_day": False, "location": l,
+             "calendar": "Esami uni", "color": "red"}
+            for n, t, h, l in [(4, "Analisi 1", 9, "Aula 2"), (18, "Programmazione", 14, "Lab 3"), (41, "Fisica", 10, "")]]
+
+
+def get_exams(day: date):
+    if DEMO:
+        return demo_exams(day), None
+    if not EXAMS or not APPLE_ID or not APP_PASSWORD:
+        return None, None  # esami non configurati: la pagina non mostra la scheda
+    with _elock:
+        if time.time() - _exams["at"] < EXAM_SECONDS:
+            return _exams["items"], _exams["error"]
+        try:
+            items, err = fetch_caldav(day, EXAM_DAYS, only=EXAMS), None
+        except Exception as exc:
+            items, err = _exams["items"], f"Errore esami iCloud: {exc}"
+        _exams.update(at=time.time(), items=items, error=err)
+        return items, err
 
 
 # ---------------------------------------------------------------- meteo
@@ -288,6 +323,7 @@ def static_files(filename):
 def api_dashboard():
     today = datetime.now(TZ).date()
     events, err = get_events(today)
+    exams, exam_err = get_exams(today)
     rem = load_reminders()
     return jsonify({
         "now": datetime.now(TZ).isoformat(),
@@ -296,7 +332,8 @@ def api_dashboard():
         "reminders": rem.get("items", []),
         "reminders_updated_at": rem.get("updated_at"),
         "weather": get_weather(),
-        "errors": [e for e in [err] if e],
+        "exams": exams,
+        "errors": [e for e in [err, exam_err] if e],
         "demo": DEMO,
     })
 
@@ -324,6 +361,8 @@ def api_reminders():
 def api_refresh():
     with _lock:
         _cache["at"] = 0.0
+    with _elock:
+        _exams["at"] = 0.0
     return jsonify({"ok": True})
 
 

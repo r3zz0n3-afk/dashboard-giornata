@@ -208,9 +208,42 @@ function renderReminders(now) {
   return groups;
 }
 
-function summary(day, isToday, timed, groups, now) {
+// Gli esami futuri, dal più vicino. `days` conta i giorni di calendario: un esame domani mattina è "tra 1 giorno".
+// `name` è il titolo senza "Esame" o "Esame di" davanti, che nella scheda Esami sarebbe ripetuto.
+function upcomingExams(now) {
+  return (data.exams || []).map(ev => ({ ...ev, s: new Date(ev.start), e: new Date(ev.end) }))
+    .filter(ev => ev.e > now).sort((a, b) => a.s - b.s)
+    .map(ev => ({ ...ev, days: Math.round((dayStart(ev.s) - dayStart(now)) / 86400000),
+      name: cap(ev.title.replace(/^esame\s+(di\s+)?/i, "") || ev.title) }));
+}
+
+// Il conto alla rovescia: una scheda per esame, come i widget di iOS. Numero grande, rosso quando manca meno di una settimana.
+function renderExams(now) {
+  const box = $("exams");
+  box.hidden = !Array.isArray(data.exams);  // null = esami non configurati nel server
+  if (box.hidden) return [];
+  const exams = upcomingExams(now);
+  $("examCount").textContent = exams.length || "";
+  $("examList").innerHTML = exams.length ? exams.slice(0, 8).map(ev => {
+    const soon = ev.days < 7 ? "text-today" : "";
+    const big = ev.days === 0 ? "Oggi" : ev.days === 1 ? "Domani" : ev.days;
+    const unit = ev.days > 1 ? `<span class="ml-1 text-[15px] font-normal tracking-normal text-muted">giorni</span>` : "";
+    const when = cap(ev.s.toLocaleDateString("it-IT", { weekday: "short", day: "numeric", month: "short" }).replaceAll(".", ""))
+      + (ev.all_day ? "" : ` · ${hm(ev.s)}`);
+    return `<article class="card w-[44%] min-w-[150px] shrink-0 snap-start p-4 md:w-auto md:min-w-0 md:p-5">
+      <div class="text-[13px] text-muted tabular-nums">${esc(when)}</div>
+      <div class="mt-1.5 text-[34px]/none font-semibold tracking-[-.03em] tabular-nums ${soon}">${big}${unit}</div>
+      <div class="mt-3 truncate font-semibold tracking-[-.015em]" title="${esc(ev.title)}">${esc(ev.name)}</div>
+      <div class="truncate text-[13px] text-muted">${esc(ev.location) || "&nbsp;"}</div></article>`;
+  }).join("") : `<div class="card w-full px-4 py-4 text-muted md:col-span-4 md:px-5">Nessun esame in calendario nei prossimi mesi.</div>`;
+  return exams;
+}
+
+function summary(day, isToday, timed, groups, now, exams = []) {
   const bits = [];
   if (isToday) {
+    const ex = exams[0];  // il prossimo esame entra nel riepilogo solo quando è vicino
+    if (ex && ex.days <= 3) bits.push(ex.days === 0 ? `Esame di ${ex.name} oggi` : ex.days === 1 ? `Esame di ${ex.name} domani` : `Esame di ${ex.name} tra ${ex.days} giorni`);
     const left = timed.filter(e => e.e > now).length;
     bits.push(left ? `${left} ${left === 1 ? "impegno" : "impegni"} ancora da fare` : "Nessun altro impegno oggi");
     if (groups.overdue.length) bits.push(`${groups.overdue.length} promemoria scadut${groups.overdue.length === 1 ? "o" : "i"}`);
@@ -240,9 +273,11 @@ function render() {
   renderWeather();
   const groups = renderReminders(now);
   const d = split(day);
+  let exams = [];
 
   if (view === "home") {
     renderNow($("hNow"), d.timed, now);
+    exams = renderExams(now);
     renderStrip($("hStrip"), d.timed, now, day, true);
     renderList({ allDay: "hAllDay", list: "hList", count: "hCount" }, d, now);
     $("hWeather").textContent = forecastText(day);
@@ -254,7 +289,7 @@ function render() {
     $("cWeather").textContent = forecastText(day);
     renderWeekList(now);
   }
-  $("summary").textContent = summary(day, isToday, d.timed, groups, now);
+  $("summary").textContent = summary(day, isToday, d.timed, groups, now, exams);
 
   const ru = data.reminders_updated_at ? new Date(data.reminders_updated_at) : null;
   $("updated").textContent = `Calendario aggiornato alle ${hm(new Date(data.now))}` +
