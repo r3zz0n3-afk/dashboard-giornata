@@ -39,9 +39,9 @@ systemctl --user restart $SERVICE
 git log --oneline -1
 EOF
 
-# 3. Controllo: la dashboard risponde?
+# 3. Controllo: la dashboard risponde? Appena riavviata può servire qualche secondo.
 for _ in 1 2 3 4 5 6 7 8 9 10; do
-  if ssh "$HOST" "curl -fsS -o /dev/null http://localhost:$PORT/"; then
+  if ssh "$HOST" "curl -fs -o /dev/null http://localhost:$PORT/"; then
     echo "Fatto: la dashboard su $HOST risponde."; exit 0
   fi
   sleep 1
