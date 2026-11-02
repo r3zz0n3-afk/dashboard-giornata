@@ -5,7 +5,7 @@ const dayStart = d => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x;
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
 const isoDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
-// Colori delle etichette (Notion). Tailwind trova le classi leggendo questo file come testo, quindi:
+// Colori delle etichette (i tag di Notion). Tailwind trova le classi leggendo questo file come testo, quindi:
 // - le classi vanno scritte per intero: un nome costruito a pezzi, come "bg-t-" + colore, non lo vedrebbe;
 // - prima di ${...} serve uno spazio: in "bg-control${x}" vedrebbe la parola "bg-control${x}", non "bg-control".
 const TAG = {
@@ -14,7 +14,7 @@ const TAG = {
   pink: "bg-t-pink text-t-pink-ink", red: "bg-t-red text-t-red-ink",
 };
 const color = c => TAG[c] || TAG.gray;
-const PILL = "inline-block max-w-full truncate rounded-full px-[9px] text-xs/[22px] font-semibold tracking-normal";
+const PILL = "inline-block max-w-full truncate rounded-[5px] px-1.5 text-xs/[22px] font-medium tracking-normal";
 const DAYS = 7;  // oggi e i 6 giorni successivi, come nel server
 let data = null;
 let sel = 0;     // giorno mostrato nel Calendario: 0 = oggi, 1 = domani, ...
@@ -198,7 +198,7 @@ function renderReminders(now) {
     if (key !== "nodate") list.sort(byDate);
     const max = key === "later" ? 5 : 20;
     const shown = list.slice(0, max);
-    html += `<div class="${html ? "mt-4" : "mt-3.5"} mb-0.5 text-[13px] font-semibold text-muted">${label}</div>`
+    html += `<div class="${html ? "mt-4" : "mt-3.5"} mb-0.5 font-mono text-[11px] font-medium tracking-[.08em] text-muted uppercase">${label}</div>`
       + shown.map((r, i) => remRow(r, key, i === shown.length - 1)).join("")
       + (list.length > max ? `<div class="pt-1 pb-3 pl-8 text-[13px] text-muted">e altri ${list.length - max}</div>` : "");
   }
@@ -217,23 +217,25 @@ function upcomingExams(now) {
       name: cap(ev.title.replace(/^esame\s+(di\s+)?/i, "") || ev.title) }));
 }
 
-// Il conto alla rovescia: una scheda per esame, come i widget di iOS. Numero grande, rosso quando manca meno di una settimana.
+// Il conto alla rovescia: un blocco pastello per esame, come i foglietti di Figma, col numero grande dei giorni.
+// Corallo quando manca meno di una settimana, gli altri si alternano fra lilla, menta e crema.
+const EXAM_BG = ["bg-lilac", "bg-mint", "bg-cream"];
 function renderExams(now) {
   const box = $("exams");
   box.hidden = !Array.isArray(data.exams);  // null = esami non configurati nel server
   if (box.hidden) return [];
   const exams = upcomingExams(now);
   $("examCount").textContent = exams.length || "";
-  $("examList").innerHTML = exams.length ? exams.slice(0, 8).map(ev => {
-    const soon = ev.days < 7 ? "text-today" : "";
+  $("examList").innerHTML = exams.length ? exams.slice(0, 8).map((ev, i) => {
+    const bg = ev.days < 7 ? "bg-coral" : EXAM_BG[i % EXAM_BG.length];
     const big = ev.days === 0 ? "Oggi" : ev.days === 1 ? "Domani" : ev.days;
     const unit = ev.days > 1 ? `<span class="ml-1 text-[15px] font-normal tracking-normal text-muted">giorni</span>` : "";
     const when = cap(ev.s.toLocaleDateString("it-IT", { weekday: "short", day: "numeric", month: "short" }).replaceAll(".", ""))
       + (ev.all_day ? "" : ` · ${hm(ev.s)}`);
-    return `<article class="card w-[44%] min-w-[150px] shrink-0 snap-start p-4 md:w-auto md:min-w-0 md:p-5">
-      <div class="text-[13px] text-muted tabular-nums">${esc(when)}</div>
-      <div class="mt-1.5 text-[34px]/none font-semibold tracking-[-.03em] tabular-nums ${soon}">${big}${unit}</div>
-      <div class="mt-3 truncate font-semibold tracking-[-.015em]" title="${esc(ev.title)}">${esc(ev.name)}</div>
+    return `<article class="note w-[44%] min-w-[150px] shrink-0 snap-start p-4 md:w-auto md:min-w-0 md:p-5 ${bg}">
+      <div class="font-mono text-[11px] tracking-[.06em] text-muted uppercase tabular-nums">${esc(when)}</div>
+      <div class="mt-2 text-[40px]/none font-light tracking-[-.04em] tabular-nums">${big}${unit}</div>
+      <div class="mt-4 truncate font-semibold tracking-[-.015em]" title="${esc(ev.title)}">${esc(ev.name)}</div>
       <div class="truncate text-[13px] text-muted">${esc(ev.location) || "&nbsp;"}</div></article>`;
   }).join("") : `<div class="card w-full px-4 py-4 text-muted md:col-span-4 md:px-5">Nessun esame in calendario nei prossimi mesi.</div>`;
   return exams;

@@ -4,17 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0c0c0c" media="(prefers-color-scheme: dark)">
 <title>La mia giornata</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<!-- Il font arriva da Google: con media="print" il browser non lo aspetta per disegnare la pagina,
-     poi onload lo attiva. Intanto si vede il font di sistema (su iPhone San Francisco). -->
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap"
+<!-- I font arrivano da Google (Inter per il testo, Geist Mono per le etichette): con media="print" il browser
+     non li aspetta per disegnare la pagina, poi onload li attiva. Intanto si vede il font di sistema. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&family=Inter:wght@300;400;500;600;700&display=swap"
       media="print" onload="this.media='all'">
 <!-- Il colore di fondo è qui dentro, così è giusto fin dal primo istante, anche prima che arrivi style.css. -->
-<style>html{background:#f5f5f7}@media (prefers-color-scheme:dark){html{background:#000}}</style>
+<style>html{background:#fff}@media (prefers-color-scheme:dark){html{background:#0c0c0c}}</style>
 <link rel="stylesheet" href="css/style.css">
 <link rel="apple-touch-icon" href="img/icon.png">
 <link rel="manifest" href="manifest.json">
@@ -33,23 +33,23 @@
   <div class="text-muted">Caricamento<span aria-hidden="true" class="*:opacity-0 *:animate-dot [&>:nth-child(2)]:[animation-delay:.2s] [&>:nth-child(3)]:[animation-delay:.4s]"><span>.</span><span>.</span><span>.</span></span></div>
 </div>
 <main aria-busy="true" class="mx-auto max-w-[1100px] px-4 pt-6 pb-28 md:px-8 md:pt-8 md:pb-10">
-  <!-- Da computer: il controllo segmentato di Apple per scegliere la schermata (sul telefono la barra è in basso) -->
+  <!-- Da computer: due pillole per scegliere la schermata, quella aperta è nera (sul telefono la barra è in basso) -->
   <nav aria-label="Schermate" class="mb-8 hidden md:flex">
-    <div class="inline-flex gap-0.5 rounded-full bg-active p-1">
-      <a href="#/" data-view="home" class="block h-8 rounded-full px-4 text-sm/8 font-semibold text-muted transition-colors hover:text-ink aria-[current=page]:bg-surface aria-[current=page]:text-ink">Home</a>
-      <a href="#/calendario" data-view="cal" class="block h-8 rounded-full px-4 text-sm/8 font-semibold text-muted transition-colors hover:text-ink aria-[current=page]:bg-surface aria-[current=page]:text-ink">Calendario</a>
+    <div class="inline-flex gap-1 rounded-full border border-rule p-1">
+      <a href="#/" data-view="home" class="block h-8 rounded-full px-4 text-sm/8 font-medium text-muted transition-colors hover:bg-active hover:text-ink aria-[current=page]:bg-ink aria-[current=page]:text-surface">Home</a>
+      <a href="#/calendario" data-view="cal" class="block h-8 rounded-full px-4 text-sm/8 font-medium text-muted transition-colors hover:bg-active hover:text-ink aria-[current=page]:bg-ink aria-[current=page]:text-surface">Calendario</a>
     </div>
   </nav>
 
-  <!-- titolo: la data a sinistra, l'ora sottile a destra come sulla schermata di blocco dell'iPhone -->
+  <!-- titolo: la data a sinistra e l'ora a destra, grandi e sottili come i titoli di Figma -->
   <header class="flex items-start justify-between gap-4">
     <div>
-      <h1 id="date" class="text-[22px]/tight font-bold tracking-[-.025em] md:text-[30px]"></h1>
-      <p id="summary" class="mt-1.5 text-muted [body:not(.loading)_&]:animate-appear"></p>
+      <h1 id="date" class="text-[24px]/[1.1] font-light tracking-[-.03em] md:text-[44px]"></h1>
+      <p id="summary" class="mt-2 text-muted [body:not(.loading)_&]:animate-appear"></p>
     </div>
     <div class="shrink-0 text-right">
-      <div id="clock" class="text-[22px]/tight font-light tracking-[-.02em] tabular-nums md:text-[30px]"></div>
-      <div id="weather" class="mt-1.5 text-sm md:text-[15px] [body:not(.loading)_&]:animate-appear"></div>
+      <div id="clock" class="text-[24px]/[1.1] font-light tracking-[-.03em] tabular-nums md:text-[44px]"></div>
+      <div id="weather" class="mt-2 text-sm md:text-[15px] [body:not(.loading)_&]:animate-appear"></div>
     </div>
   </header>
 
@@ -57,27 +57,27 @@
 
   <!-- HOME: la dashboard principale. Oggi, i promemoria e, nei prossimi passi, esami, Spotify e notifiche. -->
   <div id="viewHome" class="[body:not(.loading)_&]:animate-appear">
-    <section aria-label="Adesso" class="card mt-5 p-4 md:p-5">
+    <section aria-label="Adesso" class="note mt-6 bg-lime p-4 md:mt-8 md:p-6">
       <div id="hNow" class="mb-5 grid gap-1"></div>
       <div id="hStrip" aria-hidden="true" class="relative"></div>
     </section>
 
     <!-- Esami: il conto alla rovescia, dal calendario indicato in EXAMS nel file .env. Sul telefono le schede scorrono di lato. -->
     <section id="exams" hidden class="mt-7 md:mt-8">
-      <h2 class="mb-2.5 flex items-baseline gap-2 px-4 text-xl font-semibold tracking-[-.02em] md:px-5">Esami <span id="examCount" class="text-[15px] font-normal tracking-normal text-muted tabular-nums"></span></h2>
+      <h2 class="mb-3 flex items-baseline gap-2 px-1 font-mono text-xs font-medium tracking-[.08em] text-muted uppercase md:text-[13px]">Esami <span id="examCount" class="text-ink tabular-nums"></span></h2>
       <div id="examList" class="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 [scrollbar-width:none] md:mx-0 md:grid md:grid-cols-4 md:overflow-visible md:px-0"></div>
     </section>
 
     <div class="mt-7 grid items-start gap-6 md:mt-8 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
       <section>
-        <h2 class="mb-2.5 flex items-baseline gap-2 px-4 text-xl font-semibold tracking-[-.02em] md:px-5">Oggi <span id="hCount" class="text-[15px] font-normal tracking-normal text-muted tabular-nums"></span><span id="hWeather" class="ml-auto text-[13px] font-normal tracking-normal text-muted"></span></h2>
+        <h2 class="mb-3 flex items-baseline gap-2 px-1 font-mono text-xs font-medium tracking-[.08em] text-muted uppercase md:text-[13px]">Oggi <span id="hCount" class="text-ink tabular-nums"></span><span id="hWeather" class="ml-auto font-sans text-[13px] tracking-normal text-muted normal-case"></span></h2>
         <div class="card px-4 py-1 md:px-5">
           <div id="hAllDay" class="flex flex-wrap gap-1.5 pt-3.5 pb-1 empty:hidden"></div>
           <div id="hList"></div>
         </div>
       </section>
       <section>
-        <h2 class="mb-2.5 flex items-baseline gap-2 px-4 text-xl font-semibold tracking-[-.02em] md:px-5">Promemoria <span id="countRem" class="text-[15px] font-normal tracking-normal text-muted tabular-nums"></span></h2>
+        <h2 class="mb-3 flex items-baseline gap-2 px-1 font-mono text-xs font-medium tracking-[.08em] text-muted uppercase md:text-[13px]">Promemoria <span id="countRem" class="text-ink tabular-nums"></span></h2>
         <div id="reminders" class="card px-4 py-1 md:px-5"></div>
       </section>
     </div>
@@ -88,35 +88,35 @@
     <nav id="week" aria-label="Scegli il giorno" class="mt-5 grid grid-cols-7 md:mt-7 md:gap-1"></nav>
 
     <div id="calBody">
-      <section id="cDay" aria-label="La giornata" class="card mt-5 p-4 md:p-5">
+      <section id="cDay" aria-label="La giornata" class="note mt-5 bg-lilac p-4 md:p-6">
         <div id="cStrip" aria-hidden="true" class="relative"></div>
       </section>
 
       <div class="mt-7 grid items-start gap-6 md:mt-8 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <section>
-          <h2 class="mb-2.5 flex items-baseline gap-2 px-4 text-xl font-semibold tracking-[-.02em] md:px-5"><span id="cLabel">Oggi</span> <span id="cCount" class="text-[15px] font-normal tracking-normal text-muted tabular-nums"></span><span id="cWeather" class="ml-auto text-[13px] font-normal tracking-normal text-muted"></span></h2>
+          <h2 class="mb-3 flex items-baseline gap-2 px-1 font-mono text-xs font-medium tracking-[.08em] text-muted uppercase md:text-[13px]"><span id="cLabel">Oggi</span> <span id="cCount" class="text-ink tabular-nums"></span><span id="cWeather" class="ml-auto font-sans text-[13px] tracking-normal text-muted normal-case"></span></h2>
           <div class="card px-4 py-1 md:px-5">
             <div id="cAllDay" class="flex flex-wrap gap-1.5 pt-3.5 pb-1 empty:hidden"></div>
             <div id="cList"></div>
           </div>
         </section>
         <section>
-          <h2 class="mb-2.5 flex items-baseline gap-2 px-4 text-xl font-semibold tracking-[-.02em] md:px-5">La settimana</h2>
+          <h2 class="mb-3 flex items-baseline gap-2 px-1 font-mono text-xs font-medium tracking-[.08em] text-muted uppercase md:text-[13px]">La settimana</h2>
           <div id="weekList" class="card px-4 py-1 md:px-5"></div>
         </section>
       </div>
     </div>
   </div>
 
-  <footer class="mt-10 flex flex-wrap items-center justify-between gap-3 px-4 text-[13px] text-muted md:px-5">
+  <footer class="mt-10 flex flex-wrap items-center justify-between gap-3 px-1 text-[13px] text-muted">
     <span id="updated"></span>
-    <!-- pulsante a pillola: si "schiaccia" quando lo premi, come su iOS -->
-    <button id="refresh" type="button" class="h-11 cursor-pointer rounded-full bg-active px-4 text-sm font-semibold text-ink
-      transition hover:bg-control active:scale-96 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent md:h-8">Aggiorna</button>
+    <!-- pulsante a pillola nera, come quelli di Figma: si "schiaccia" quando lo premi -->
+    <button id="refresh" type="button" class="h-11 cursor-pointer rounded-full bg-ink px-5 text-sm font-medium text-surface
+      transition hover:opacity-85 active:scale-96 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent md:h-8">Aggiorna</button>
   </footer>
 </main>
 
-<!-- Sul telefono: la barra in basso come nelle app iOS, con lo spazio per la barra di sistema dell'iPhone (safe-area). -->
+<!-- Sul telefono: la barra in basso, con lo spazio per la barra di sistema dell'iPhone (safe-area). -->
 <nav aria-label="Schermate" class="fixed inset-x-0 bottom-0 z-[5] flex border-t border-rule bg-surface pb-[env(safe-area-inset-bottom)] md:hidden">
   <a href="#/" data-view="home" class="flex flex-1 flex-col items-center gap-0.5 pt-2 pb-1.5 text-[11px] font-semibold text-muted aria-[current=page]:text-ink">
     <svg viewBox="0 0 24 24" aria-hidden="true" class="size-6 fill-none stroke-current stroke-[1.6] [stroke-linecap:round] [stroke-linejoin:round]"><path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z"/></svg>

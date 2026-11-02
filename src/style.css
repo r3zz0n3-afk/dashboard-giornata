@@ -1,8 +1,9 @@
 /* Sorgente dello stile. Tailwind lo trasforma in static/css/style.css con: npm run build
-   Notion + Apple, con le regole della taste-skill per gli schermi da app.
-   Da Apple: fondo grigio chiaro (nero col tema scuro) con schede che si staccano per tono, non per bordi o ombre;
-   font di sistema (San Francisco su iPhone e Mac); blu Apple sui dati; settimana come l'app Calendario;
-   cerchietti dei Promemoria. Da Notion: i colori delle etichette dei calendari e il blocco "adesso". */
+   Notion + Figma, con le regole della taste-skill per gli schermi da app.
+   Da Figma: cornice in bianco e nero (fondo bianco, testo nero, pulsanti a pillola neri), interrotta da
+   grandi blocchi pastello pieni (lime, lilla, menta, corallo, crema) come foglietti su una scrivania;
+   etichette in monospace maiuscolo per i titoli delle sezioni; il magenta per "adesso".
+   Da Notion: schede bianche con il bordo sottile, grigi caldi, le etichette dei calendari come i tag. */
 @import "tailwindcss";
 
 /* dove cercare le classi usate: la pagina e lo script che la disegna */
@@ -11,33 +12,42 @@
 
 /* Il tema: ogni --color-X diventa le classi bg-X, text-X, border-X... */
 @theme {
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-sans: "Inter", system-ui, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
   --breakpoint-md: 821px;  /* sotto questa larghezza è il layout da telefono */
-  --radius-card: 18px;
+  --radius-card: 20px;
 
-  --color-ground: #f5f5f7;
+  --color-ground: #ffffff;
   --color-surface: #ffffff;
-  --color-active: #e8e8ed;
-  --color-past: rgba(0, 0, 0, .035);
-  --color-rule: #e5e5ea;
-  --color-control: #c7c7cc;
-  --color-ink: #1d1d1f;
-  --color-muted: #6e6e73;
-  --color-accent: #0066cc;
-  --color-today: #d70015;
-  --color-danger: #c4242a;
-  --color-danger-bg: #ffedea;
-  --color-track: #e8e8ed;
+  --color-active: #f1f1ef;
+  --color-past: rgba(0, 0, 0, .05);
+  --color-rule: #e9e9e7;
+  --color-control: #c9c9c6;
+  --color-ink: #000000;
+  --color-muted: #787774;
+  --color-accent: #ff3d8b;
+  --color-today: #ff3d8b;
+  --color-danger: #d4351c;
+  --color-danger-bg: #fde4dc;
+  --color-track: #ececea;
 
-  /* etichette dei calendari, come le proprietà "select" di Notion */
-  --color-t-gray: #e3e2e0;   --color-t-gray-ink: #32302c;
-  --color-t-brown: #eee0da;  --color-t-brown-ink: #442a1e;
-  --color-t-orange: #fadec9; --color-t-orange-ink: #49290e;
-  --color-t-yellow: #fdecc8; --color-t-yellow-ink: #402c1b;
-  --color-t-green: #dbeddb;  --color-t-green-ink: #1c3829;
-  --color-t-blue: #d3e5ef;   --color-t-blue-ink: #183347;
-  --color-t-pink: #f5e0e9;   --color-t-pink-ink: #4c2337;
-  --color-t-red: #ffe2dd;    --color-t-red-ink: #5d1715;
+  /* i blocchi pastello di Figma: restano uguali anche col tema scuro, con il testo sempre nero */
+  --color-lime: #dceeb1;
+  --color-lilac: #c5b0f4;
+  --color-mint: #c8e6cd;
+  --color-coral: #f3c9b6;
+  --color-cream: #f4ecd6;
+  --color-rose: #f6cfe0;
+
+  /* etichette dei calendari: i tag di Notion, nei pastelli più accesi di Figma */
+  --color-t-gray: #e9e9e6;   --color-t-gray-ink: #1a1a1a;
+  --color-t-brown: #ebdccb;  --color-t-brown-ink: #1a1a1a;
+  --color-t-orange: #f8cfb4; --color-t-orange-ink: #1a1a1a;
+  --color-t-yellow: #f7e7a1; --color-t-yellow-ink: #1a1a1a;
+  --color-t-green: #c8e6cd;  --color-t-green-ink: #1a1a1a;
+  --color-t-blue: #c6daf8;   --color-t-blue-ink: #1a1a1a;
+  --color-t-pink: #f6cfe0;   --color-t-pink-ink: #1a1a1a;
+  --color-t-red: #f8c4c0;    --color-t-red-ink: #1a1a1a;
 
   /* animazioni: diventano le classi animate-appear, animate-breathe... */
   --animate-appear: appear .35s ease-out;
@@ -48,30 +58,36 @@
   @keyframes dot { 30%, 70% { opacity: 1; } }
 }
 
-/* Tema scuro: stessi nomi, valori di iOS. Le classi non cambiano, cambiano i colori dietro. */
+/* Tema scuro: la "lavagna" nera di Figma. Le classi non cambiano, cambiano i colori dietro. */
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-ground: #000000; --color-surface: #1c1c1e; --color-active: #2c2c2e; --color-past: rgba(255, 255, 255, .03);
-    --color-rule: #38383a; --color-control: #545458;
-    --color-ink: #f5f5f7; --color-muted: #98989d;
-    --color-accent: #2997ff; --color-danger: #ff6961; --color-danger-bg: #2c1a1a;
-    --color-track: #3a3a3c;
-    --color-t-gray: #3a3a3c;   --color-t-gray-ink: #e5e5ea;
-    --color-t-brown: #4a3228;  --color-t-brown-ink: #ead8cf;
-    --color-t-orange: #5c3b23; --color-t-orange-ink: #f5d9c2;
-    --color-t-yellow: #56452a; --color-t-yellow-ink: #f3e3c0;
-    --color-t-green: #2b4234;  --color-t-green-ink: #cfe8d6;
-    --color-t-blue: #233b52;   --color-t-blue-ink: #cfe2f1;
-    --color-t-pink: #4b2c3b;   --color-t-pink-ink: #f3d4e3;
-    --color-t-red: #522e2a;    --color-t-red-ink: #f6d3cd;
+    --color-ground: #0c0c0c; --color-surface: #151515; --color-active: #242424; --color-past: rgba(255, 255, 255, .05);
+    --color-rule: #2a2a2a; --color-control: #4d4d4d;
+    --color-ink: #f5f5f4; --color-muted: #9b9a97;
+    --color-accent: #ff5c9d; --color-today: #ff5c9d; --color-danger: #ff7a66; --color-danger-bg: #2e1914;
+    --color-track: #2e2e2e;
   }
 }
 
-/* Una classe fatta su misura: la scheda bianca (grigio scuro col tema scuro) dagli angoli morbidi */
+/* Una classe fatta su misura: la scheda di Notion, bianca col bordo sottile e gli angoli morbidi */
 @utility card {
   background-color: var(--color-surface);
+  border: 1px solid var(--color-rule);
   border-radius: 16px;
   @variant md { border-radius: var(--radius-card); }
+}
+
+/* Il blocco pastello di Figma (il colore si sceglie con bg-lime, bg-lilac...). Dentro, testo nero e grigi
+   trasparenti anche col tema scuro: ridefinisce le variabili, così text-muted, bg-track... restano leggibili. */
+@utility note {
+  color: #000;
+  border-radius: 16px;
+  @variant md { border-radius: var(--radius-card); }
+  --color-ink: #000;
+  --color-muted: rgba(0, 0, 0, .6);
+  --color-track: rgba(0, 0, 0, .12);
+  --color-past: rgba(0, 0, 0, .07);
+  --color-accent: #e0006b;
 }
 
 @layer base {
