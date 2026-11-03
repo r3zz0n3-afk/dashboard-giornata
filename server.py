@@ -427,7 +427,11 @@ def api_reminders_sync():
         t = load_todos()
         new = []
         for i in t["items"]:
-            i["exported"] = True  # da qui in poi, quando arriva da Apple con lo stesso titolo, si toglie dalla dashboard
+            # ogni promemoria nuovo si manda una volta sola: se il comando partisse due volte prima che l'iPhone
+            # rimandi la lista, verrebbe creato doppio. Quando arriva da Apple con lo stesso titolo, si toglie da qui.
+            if i.get("exported"):
+                continue
+            i["exported"] = True
             due = ""
             if i.get("due"):
                 d = datetime.fromisoformat(i["due"])

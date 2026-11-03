@@ -135,7 +135,8 @@ Il server gli prepara la lista di cosa fare all'indirizzo `/api/reminders/sync`:
 - `done`: promemoria spuntati nella dashboard, da segnare come **completati** (restano nella sezione Completati, si possono recuperare);
 - `new`: promemoria aggiunti nella dashboard, da **creare** in Apple. Dopo, arrivano dall'iPhone come gli altri e la dashboard toglie la sua copia.
 
-Apri il comando "Invia promemoria" e aggiungi queste azioni **all'inizio**, prima di *Trova promemoria*:
+Crea un secondo comando, ad esempio **"Ricevo promemoria aggiornati"**, con queste azioni.
+(Puoi anche metterle all'inizio di "Invia promemoria", prima di *Trova promemoria*: fanno la stessa cosa.)
 
 1. **Ottieni contenuto dell'URL**
    - URL: `http://IP-DEL-PC:8080/api/reminders/sync`
@@ -154,7 +155,13 @@ Apri il comando "Invia promemoria" e aggiungi queste azioni **all'inizio**, prim
    3. **Ottieni date dall'input**, con il valore `due`. Se il promemoria non ha data, resta vuoto.
    4. **Aggiungi nuovo promemoria**: titolo il valore `title`; in *Mostra di più* attiva l'avviso **In una data** e scegli le *Date*.
 
-Poi il comando continua come prima: trova i promemoria e li manda alla dashboard.
+Per farlo partire da solo: **Automazione → + → App → Promemoria → "Viene aperta"**, *Esegui immediatamente*,
+azione "Esegui comando → Ricevo promemoria aggiornati". Insieme all'automazione "Viene chiusa" di "Invia promemoria"
+il giro si chiude: aprendo Promemoria arrivano le modifiche della dashboard, chiudendolo la dashboard riceve la lista aggiornata.
+
+Ogni promemoria nuovo viene consegnato **una volta sola**, anche se il comando parte più volte: niente doppioni.
+Le spunte invece vengono rimandate finché l'iPhone non manda la lista aggiornata, ma non fa danni:
+il filtro *Completato è disattivato* trova solo quelli ancora aperti.
 
 > Se due promemoria aperti hanno lo **stesso titolo**, spuntarne uno nella dashboard li chiude **tutti e due** su Apple:
 > il Comando Rapido li cerca per nome.
