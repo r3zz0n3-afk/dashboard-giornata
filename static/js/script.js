@@ -21,6 +21,7 @@ let sel = 0;     // giorno mostrato nel Calendario: 0 = oggi, 1 = domani, ...
 let view = "home";  // schermata: "home" (#/) o "cal" (#/calendario)
 let open = null;    // l'evento o l'esame toccato, per mostrarne i dettagli: la sua chiave (inizio + titolo)
 const keyOf = ev => ev.start + ev.title;
+const ticking = new Map();  // promemoria appena spuntati: id -> timer che li toglie dopo un attimo
 
 function dur(min) {
   if (min < 60) return `${min} min`;
@@ -184,6 +185,7 @@ function renderReminders(now) {
   const tStart = dayStart(now), tEnd = addDays(tStart, 1);
   const groups = { overdue: [], today: [], later: [], nodate: [] };
   for (const r of data.reminders || []) {
+    r.d = null;
     if (!r.due) { groups.nodate.push(r); continue; }
     const d = new Date(r.due);
     r.d = d;
@@ -202,9 +204,13 @@ function renderReminders(now) {
       if (kind === "overdue") when = `<b class="font-semibold text-danger">${when}</b>`;
     }
     const meta = [when, esc(r.list)].filter(Boolean).join(" · ");
+    // il cerchietto è un pulsante: spuntato si riempie di nero con la ✓, e il testo si barra
+    const on = ticking.has(r.id);
     return `<div class="grid grid-cols-[20px_minmax(0,1fr)] gap-3 py-2.5 ${last ? "" : "border-b border-rule"}">
-      <div class="mt-px size-5 rounded-full border-[1.5px] border-control"></div>
-      <div><div>${esc(r.title)}</div>${meta ? `<div class="text-[13px] text-muted">${meta}</div>` : ""}</div></div>`;
+      <button type="button" data-done="${esc(r.id)}" aria-pressed="${on}" aria-label="Fatto: ${esc(r.title)}"
+        class="relative mt-px grid size-5 cursor-pointer place-items-center rounded-full border-[1.5px] transition-colors before:absolute before:-inset-2.5 ${on ? "border-ink bg-ink text-surface" : "border-control text-transparent hover:border-ink"}">
+        <svg viewBox="0 0 12 12" aria-hidden="true" class="size-3 fill-none stroke-current stroke-2 [stroke-linecap:round] [stroke-linejoin:round]"><path d="m2.5 6.2 2.3 2.3 4.7-5"/></svg></button>
+      <div class="${on ? "text-muted line-through" : ""}"><div>${esc(r.title)}</div>${meta ? `<div class="text-[13px] text-muted">${meta}</div>` : ""}</div></div>`;
   };
   const sections = [["Scaduti", "overdue"], ["Oggi", "today"], ["Prossimi", "later"], ["Senza data", "nodate"]];
   let html = "";
@@ -218,7 +224,7 @@ function renderReminders(now) {
       + shown.map((r, i) => remRow(r, key, i === shown.length - 1)).join("")
       + (list.length > max ? `<div class="pt-1 pb-3 pl-8 text-[13px] text-muted">e altri ${list.length - max}</div>` : "");
   }
-  $("reminders").innerHTML = html || `<div class="py-4 text-muted">${data.reminders_updated_at ? "Nessun promemoria da fare." : "Nessun promemoria ricevuto dall'iPhone finora."}</div>`;
+  $("reminders").innerHTML = html || `<div class="py-4 text-muted">Niente da fare.</div>`;
   const pending = groups.overdue.length + groups.today.length;
   $("countRem").textContent = pending ? `${pending} da fare oggi` : "";
   return groups;
@@ -395,6 +401,55 @@ document.addEventListener("click", e => {
   render();
 });
 addEventListener("keydown", e => { if (e.key === "Escape" && open) { open = null; render(); } });
+
+// Spuntare un promemoria: si riempie subito, e dopo 1,5 secondi sparisce e il server lo segna come fatto.
+// Se lo tocchi di nuovo prima, ci ripensi e non succede niente.
+$("reminders").onclick = e => {
+  const b = e.target.closest("[data-done]");
+  if (!b) return;
+  const id = b.dataset.done;
+  if (ticking.has(id)) { clearTimeout(ticking.get(id)); ticking.delete(id); render(); return; }
+  ticking.set(id, setTimeout(async () => {
+    try {
+      const r = await fetch(`api/todos/${encodeURIComponent(id)}/done`, { method: "POST" });
+      if (!r.ok) throw new Error(r.status);
+      data.reminders = data.reminders.filter(x => x.id !== id);
+    } catch (err) {
+      $("alerts").innerHTML = notice(`Non sono riuscito a spuntare il promemoria: ${err.message}`);
+    }
+    ticking.delete(id);
+    render();
+  }, 1500));
+  render();
+};
+
+// Aggiungere un promemoria: "+ Nuovo promemoria" apre il modulo, Annulla (o Esc) lo chiude.
+function addForm(show) {
+  $("addForm").hidden = !show;
+  $("addOpen").hidden = show;
+  if (show) $("addTitle").focus(); else $("addForm").reset();
+}
+$("addOpen").onclick = () => addForm(true);
+$("addCancel").onclick = () => addForm(false);
+$("addForm").onkeydown = e => { if (e.key === "Escape") addForm(false); };
+$("addForm").onsubmit = async e => {
+  e.preventDefault();  // senza questo il browser ricaricherebbe la pagina
+  const btn = e.target.querySelector("[type=submit]"), f = new FormData(e.target);
+  btn.disabled = true;
+  try {
+    const r = await fetch("api/todos", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: f.get("title"), date: f.get("date"), time: f.get("date") ? f.get("time") : "" }),
+    });
+    if (!r.ok) throw new Error(r.status);
+    data.reminders.push((await r.json()).item);
+    addForm(false);
+    render();
+  } catch (err) {
+    $("alerts").innerHTML = notice(`Non sono riuscito ad aggiungere il promemoria: ${err.message}`);
+  }
+  btn.disabled = false;
+};
 
 $("refresh").onclick = () => load(true);
 addEventListener("hashchange", route);

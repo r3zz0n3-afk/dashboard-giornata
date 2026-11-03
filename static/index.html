@@ -78,7 +78,29 @@
       </section>
       <section>
         <h2 class="mb-3 flex items-baseline gap-2 px-1 font-mono text-xs font-medium tracking-[.08em] text-muted uppercase md:text-[13px]">Promemoria <span id="countRem" class="text-ink tabular-nums"></span></h2>
-        <div id="reminders" class="card px-4 py-1 md:px-5"></div>
+        <div class="card px-4 py-1 md:px-5">
+          <div id="reminders"></div>
+          <!-- Aggiungere un promemoria: resta fuori da #reminders, così il ridisegno ogni 15 secondi non cancella quello che scrivi -->
+          <div class="border-t border-rule">
+            <button id="addOpen" type="button" class="flex w-full cursor-pointer items-center gap-3 py-3 text-left text-muted hover:text-ink">
+              <span aria-hidden="true" class="grid size-5 place-items-center text-xl/none">+</span>Nuovo promemoria
+            </button>
+            <form id="addForm" hidden class="py-3">
+              <input id="addTitle" name="title" required maxlength="200" autocomplete="off" placeholder="Cosa devi fare?" aria-label="Promemoria"
+                class="w-full rounded-lg border border-rule bg-transparent px-3 py-2.5 text-base outline-none placeholder:text-muted focus:border-ink">
+              <div class="mt-2 flex flex-wrap items-center gap-2">
+                <input id="addDate" name="date" type="date" aria-label="Giorno (facoltativo)"
+                  class="h-10 rounded-lg border border-rule bg-transparent px-2.5 text-sm text-ink outline-none focus:border-ink">
+                <input id="addTime" name="time" type="time" aria-label="Ora (facoltativa)"
+                  class="h-10 rounded-lg border border-rule bg-transparent px-2.5 text-sm text-ink outline-none focus:border-ink">
+                <span class="ml-auto flex gap-2">
+                  <button id="addCancel" type="button" class="h-10 cursor-pointer rounded-full px-4 text-sm font-medium text-muted hover:bg-active hover:text-ink">Annulla</button>
+                  <button type="submit" class="h-10 cursor-pointer rounded-full bg-ink px-5 text-sm font-medium text-surface transition hover:opacity-85 active:scale-96 disabled:opacity-50">Aggiungi</button>
+                </span>
+              </div>
+            </form>
+          </div>
+        </div>
       </section>
     </div>
   </div>

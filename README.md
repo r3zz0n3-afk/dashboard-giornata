@@ -6,7 +6,7 @@ Una pagina web con due schermate, che si scelgono dalla barra in basso sul telef
 - **Adesso / Prossimo**: cosa stai facendo e cosa viene dopo, con il tempo che manca, sulla barra delle ore di oggi.
 - **Esami**: il conto alla rovescia ai prossimi esami, presi da un calendario apposta.
 - **Oggi**: gli eventi del calendario Apple (iCloud), con quelli passati sbiaditi.
-- **Promemoria**: quelli scaduti, quelli di oggi, i prossimi e quelli senza data.
+- **Promemoria**: quelli scaduti, quelli di oggi, i prossimi e quelli senza data. Si spuntano toccando il cerchietto e se ne aggiungono di nuovi con "+ Nuovo promemoria".
 
 **Calendario**, la settimana un giorno alla volta:
 - Ogni giorno ha la barra dalle 00 alle 24 e la lista degli impegni.
@@ -124,6 +124,13 @@ Apri l'app **Comandi Rapidi**, tocca **+** e chiamalo "Invia promemoria". Poi ag
 
 Premi ▶︎ per provarlo. Se funziona vedi una risposta tipo `{"ok": true, "ricevuti": 7}` e i promemoria compaiono nella dashboard.
 
+### Spuntare e aggiungere dalla dashboard
+Apple non permette di scrivere nei Promemoria da fuori, quindi quello che fai nella dashboard **resta nella dashboard**:
+- spuntando un promemoria arrivato dall'iPhone, sparisce dalla dashboard ma **resta aperto nell'app Promemoria**;
+- quelli aggiunti con "+ Nuovo promemoria" esistono solo nella dashboard.
+
+Spunte e promemoria nuovi sono salvati nel file `data/todos.json` del server.
+
 ### Rendilo automatico
 Nell'app Comandi Rapidi vai su **Automazione**, poi tocca **+**. Due idee, anche insieme:
 - **App → Promemoria → "Viene chiusa"**: ogni volta che esci da Promemoria, la dashboard si aggiorna.
@@ -203,5 +210,6 @@ npm run build      # prima del commit: genera la versione finale, compressa
 | `static/css/style.css` | Lo stile generato da Tailwind (non modificarlo a mano) |
 | `.env` | Le tue impostazioni (privato, non condividerlo) |
 | `data/reminders.json` | Ultimi promemoria ricevuti dall'iPhone |
+| `data/todos.json` | Promemoria aggiunti dalla dashboard e spunte |
 | `install.sh` | Installazione e servizio sempre attivo |
 | `deploy.sh` | Aggiorna il server da GitHub con un comando |

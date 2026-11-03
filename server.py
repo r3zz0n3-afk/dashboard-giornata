@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Dashboard giornata: calendario iCloud (CalDAV) + Promemoria (via Comando Rapido iPhone)."""
+import hashlib
 import json
 import os
+import secrets
 import threading
 import time
 from datetime import date, datetime, timedelta, time as dtime
@@ -36,6 +38,7 @@ EXAM_SECONDS = int(os.getenv("EXAM_SECONDS", "1800"))  # gli esami cambiano di r
 DATA = BASE / "data"
 DATA.mkdir(exist_ok=True)
 REM_FILE = DATA / "reminders.json"
+TODO_FILE = DATA / "todos.json"  # promemoria aggiunti dalla dashboard e spunte
 
 # colori dei tag di Notion: la pagina li traduce in classi CSS (c-blue, c-orange, ...)
 PALETTE = ["blue", "orange", "green", "pink", "yellow", "brown", "red", "gray"]
@@ -306,6 +309,41 @@ def load_reminders():
         return {"updated_at": None, "items": []}
 
 
+# ---------------------------------------------------------------- promemoria della dashboard
+# Apple non permette di scrivere nei Promemoria da fuori, quindi spunte e promemoria nuovi restano qui:
+# in data/todos.json ci sono {"items": [promemoria aggiunti], "done": [id dei promemoria Apple spuntati]}.
+_tlock = threading.Lock()
+
+
+def _apple_id(r):
+    """Un id stabile per un promemoria arrivato dall'iPhone: lo stesso titolo, scadenza ed elenco danno lo stesso id."""
+    raw = f"{r.get('title')}|{r.get('due')}|{r.get('list')}"
+    return "a" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
+
+
+def load_todos():
+    try:
+        t = json.loads(TODO_FILE.read_text(encoding="utf-8"))
+        return {"items": list(t.get("items", [])), "done": list(t.get("done", []))}
+    except (OSError, json.JSONDecodeError):
+        return {"items": [], "done": []}
+
+
+def save_todos(t):
+    tmp = TODO_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(t, ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp.replace(TODO_FILE)  # scrive su un file temporaneo e poi lo sostituisce: mai un file a metà
+
+
+def all_reminders(apple):
+    """I promemoria da mostrare: quelli dell'iPhone non ancora spuntati qui, più quelli aggiunti dalla dashboard."""
+    t = load_todos()
+    done = set(t["done"])
+    out = [dict(r, id=_apple_id(r), source="apple") for r in apple]
+    out = [r for r in out if r["id"] not in done]
+    return out + [dict(r, source="dash") for r in t["items"]]
+
+
 # ---------------------------------------------------------------- rotte
 @app.get("/")
 def index():
@@ -329,7 +367,7 @@ def api_dashboard():
         "now": datetime.now(TZ).isoformat(),
         "today": today.isoformat(),
         "events": events,
-        "reminders": rem.get("items", []),
+        "reminders": all_reminders(rem.get("items", [])),
         "reminders_updated_at": rem.get("updated_at"),
         "weather": get_weather(),
         "exams": exams,
@@ -355,6 +393,44 @@ def api_reminders():
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
     tmp.replace(REM_FILE)
     return jsonify({"ok": True, "ricevuti": len(items)})
+
+
+@app.post("/api/todos")
+def api_todo_add():
+    """Aggiunge un promemoria dalla dashboard: {"title": "...", "date": "2026-11-05", "time": "17:30"} (data e ora facoltative)."""
+    body = request.get_json(silent=True) or {}
+    title = str(body.get("title", "")).strip()[:200]
+    if not title:
+        abort(400, "manca il titolo")
+    due, date_only = None, False
+    if body.get("date"):
+        try:
+            d = date.fromisoformat(str(body["date"]))
+            t = dtime.fromisoformat(str(body["time"])) if body.get("time") else dtime.min
+        except ValueError:
+            abort(400, "data o ora non valida")
+        due, date_only = datetime.combine(d, t, TZ).isoformat(), not body.get("time")
+    item = {"id": "d" + secrets.token_hex(6), "title": title, "due": due, "date_only": date_only, "list": ""}
+    with _tlock:
+        t = load_todos()
+        t["items"].append(item)
+        save_todos(t)
+    return jsonify({"ok": True, "item": item})
+
+
+@app.post("/api/todos/<rid>/done")
+def api_todo_done(rid):
+    """Spunta un promemoria: quelli della dashboard si cancellano, quelli dell'iPhone si nascondono."""
+    with _tlock:
+        t = load_todos()
+        if rid.startswith("d"):
+            t["items"] = [i for i in t["items"] if i["id"] != rid]
+        else:
+            # tiene solo le spunte di promemoria che l'iPhone manda ancora: la lista non cresce all'infinito
+            alive = {_apple_id(r) for r in load_reminders().get("items", [])}
+            t["done"] = [x for x in t["done"] if x in alive and x != rid] + [rid]
+        save_todos(t)
+    return jsonify({"ok": True})
 
 
 @app.post("/api/refresh")
