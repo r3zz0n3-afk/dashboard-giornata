@@ -451,7 +451,64 @@ $("addForm").onsubmit = async e => {
   btn.disabled = false;
 };
 
+// Notifiche. Tre passi: registrare il service worker (sw.js), chiedere il permesso, iscriversi al servizio push
+// del telefono con la chiave pubblica del server; l'iscrizione (endpoint + chiavi) va poi al server, che la usa per scrivere.
+// Su iPhone funziona solo in https e con la dashboard aggiunta alla schermata Home.
+const PUSH_BTN = "h-11 cursor-pointer rounded-full border border-rule px-4 text-sm font-medium text-ink transition hover:bg-active active:scale-96 disabled:opacity-50 md:h-8";
+const swReady = "serviceWorker" in navigator && "PushManager" in window
+  ? navigator.serviceWorker.register("sw.js").then(() => navigator.serviceWorker.ready) : null;
+const postJSON = (url, body) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+  .then(r => { if (!r.ok) throw new Error(r.status); return r; });
+// la chiave del server è in base64 "per URL": il browser la vuole come byte
+const keyBytes = s => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
+
+async function renderPush() {
+  const el = $("push");
+  if (!swReady) {
+    el.innerHTML = `<span>${isSecureContext ? "Per le notifiche aggiungi la dashboard alla schermata Home" : "Per le notifiche apri la dashboard in https"}</span>`;
+    return;
+  }
+  if (Notification.permission === "denied") {
+    el.innerHTML = "<span>Notifiche bloccate: riattivale nelle Impostazioni</span>";
+    return;
+  }
+  const sub = await (await swReady).pushManager.getSubscription();
+  if (sub) postJSON("api/push/subscribe", sub.toJSON()).catch(() => {});  // ricorda al server l'iscrizione, se l'avesse persa
+  el.innerHTML = sub
+    ? `<button type="button" data-push="test" class="${PUSH_BTN}">Prova notifica</button>
+       <button type="button" data-push="off" class="${PUSH_BTN}">Disattiva notifiche</button>`
+    : `<button type="button" data-push="on" class="${PUSH_BTN}">Attiva notifiche</button>`;
+}
+
+$("push").onclick = async e => {
+  const btn = e.target.closest("[data-push]");
+  if (!btn) return;
+  btn.disabled = true;
+  try {
+    if (btn.dataset.push === "on") {
+      // il permesso va chiesto subito dopo il tocco: iOS non lo mostra se prima si aspetta altro
+      if (await Notification.requestPermission() === "granted") {
+        const { key } = await (await fetch("api/push/key")).json();
+        const sub = await (await swReady).pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(key) });
+        await postJSON("api/push/subscribe", sub.toJSON());
+        await postJSON("api/push/test", { endpoint: sub.endpoint });
+      }
+    } else {
+      const sub = await (await swReady).pushManager.getSubscription();
+      if (btn.dataset.push === "test") await postJSON("api/push/test", { endpoint: sub.endpoint });
+      else if (sub) {
+        await postJSON("api/push/unsubscribe", { endpoint: sub.endpoint });
+        await sub.unsubscribe();
+      }
+    }
+  } catch (err) {
+    $("alerts").innerHTML = notice(`Notifiche: qualcosa non ha funzionato (${err.message})`);
+  }
+  renderPush();
+};
+
 $("refresh").onclick = () => load(true);
+renderPush();
 addEventListener("hashchange", route);
 route();                             // sceglie la schermata e disegna subito data e orologio, senza aspettare il server
 load();

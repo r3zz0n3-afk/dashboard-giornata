@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import re
 import secrets
 import threading
 import time
@@ -12,8 +13,11 @@ from urllib.parse import urlencode
 from urllib.request import urlopen
 from zoneinfo import ZoneInfo
 
+from cryptography.hazmat.primitives import serialization
 from dotenv import load_dotenv
 from flask import Flask, abort, jsonify, request, send_from_directory
+from py_vapid import Vapid01, b64urlencode
+from pywebpush import WebPushException, webpush
 
 BASE = Path(__file__).resolve().parent
 load_dotenv(BASE / ".env")
@@ -40,6 +44,13 @@ DATA.mkdir(exist_ok=True)
 REM_FILE = DATA / "reminders.json"
 TODO_FILE = DATA / "todos.json"  # promemoria aggiunti dalla dashboard e spunte
 RESEND_SECONDS = 600  # dopo quanto rimandare all'iPhone un promemoria nuovo che non è ancora arrivato in Apple
+PUSH_FILE = DATA / "push.json"  # dispositivi iscritti alle notifiche e notifiche già mandate
+VAPID_FILE = DATA / "vapid.pem"  # chiave privata con cui il server firma le notifiche: si crea da sola al primo avvio
+PUSH_CONTACT = os.getenv("PUSH_CONTACT", "mailto:dashboard-giornata@users.noreply.github.com")
+NOTIFY_BEFORE = int(os.getenv("NOTIFY_BEFORE", "15"))  # minuti di anticipo per gli eventi
+MORNING_AT = dtime(7, 30)  # riepilogo del mattino
+EXAM_AT = dtime(8)  # avviso esami
+EXAM_NOTICE = (7, 3, 1)  # giorni prima dell'esame in cui avvisare
 
 # colori dei tag di Notion: la pagina li traduce in classi CSS (c-blue, c-orange, ...)
 PALETTE = ["blue", "orange", "green", "pink", "yellow", "brown", "red", "gray"]
@@ -374,6 +385,157 @@ def _check_token():
         abort(401)
 
 
+# ---------------------------------------------------------------- notifiche
+# Web Push: il telefono, quando ti iscrivi, dà alla pagina un "endpoint" (un indirizzo di Apple o Google) e due chiavi.
+# Il server cifra il messaggio con quelle chiavi, lo firma con la sua chiave VAPID e lo manda all'endpoint;
+# Apple lo consegna al telefono, dove il service worker (static/sw.js) mostra la notifica anche a pagina chiusa.
+# data/push.json: {"subs": [iscrizioni], "sent": {chiave: giorno}}; "sent" ricorda cosa è già partito, anche dopo un riavvio.
+_plock = threading.Lock()
+# l'endpoint arriva dalla pagina: il server ci manda richieste, quindi accetta solo i servizi push veri
+PUSH_HOSTS = ("push.apple.com", "fcm.googleapis.com", "push.services.mozilla.com", "notify.windows.com")
+GIORNI = ["lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica"]
+
+
+def load_push():
+    try:
+        return json.loads(PUSH_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"subs": [], "sent": {}}
+
+
+def save_push(p):
+    tmp = PUSH_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(p, ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp.replace(PUSH_FILE)
+
+
+def vapid_public_key():
+    """La chiave pubblica che la pagina passa al telefono: così il telefono accetta solo notifiche firmate da questo server."""
+    with _plock:
+        if not VAPID_FILE.exists():
+            v = Vapid01()
+            v.generate_keys()
+            v.save_key(str(VAPID_FILE))
+            VAPID_FILE.chmod(0o600)  # è un segreto: leggibile solo dal tuo utente
+        v = Vapid01.from_file(str(VAPID_FILE))
+    raw = v.public_key.public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)
+    return b64urlencode(raw)
+
+
+def _push_host_ok(endpoint):
+    m = re.match(r"https://([^/:]+)/", endpoint)
+    return bool(m) and any(m[1] == h or m[1].endswith("." + h) for h in PUSH_HOSTS)
+
+
+def push_send(title, body, only=None):
+    """Manda una notifica a tutti gli iscritti (o solo all'endpoint `only`). Ritorna a quanti è arrivata."""
+    with _plock:
+        subs = [s for s in load_push()["subs"] if only is None or s["endpoint"] == only]
+    msg = json.dumps({"title": title, "body": body}, ensure_ascii=False)
+    sent, gone = 0, []
+    for s in subs:
+        try:
+            # ttl: se il telefono è spento, Apple tiene la notifica per un'ora, poi la butta
+            webpush(s, msg, vapid_private_key=str(VAPID_FILE), vapid_claims={"sub": PUSH_CONTACT}, ttl=3600, timeout=10)
+            sent += 1
+        except WebPushException as exc:
+            code = exc.response.status_code if exc.response is not None else None
+            if code in (404, 410):  # iscrizione scaduta o disattivata dal telefono: la toglie
+                gone.append(s["endpoint"])
+            else:
+                print(f"Notifica non partita ({code}): {exc}", flush=True)
+    if gone:
+        with _plock:
+            p = load_push()
+            p["subs"] = [s for s in p["subs"] if s["endpoint"] not in gone]
+            save_push(p)
+    return sent
+
+
+def _exam_name(title):
+    return re.sub(r"^esame\s+(di\s+)?", "", title.strip(), flags=re.I) or title
+
+
+def due_notifications(now):
+    """Le notifiche da mandare adesso, come (chiave, titolo, testo). La chiave è unica: ogni notifica parte una volta."""
+    today = now.date()
+    out = []
+    events, _ = get_events(today)
+    timed = sorted((e for e in events if not e["all_day"] and datetime.fromisoformat(e["start"]).date() == today),
+                   key=lambda e: e["start"])
+
+    # evento tra poco: tra adesso e NOTIFY_BEFORE minuti
+    for e in timed:
+        start, end = datetime.fromisoformat(e["start"]), datetime.fromisoformat(e["end"])
+        mins = round((start - now).total_seconds() / 60)
+        if 0 <= mins <= NOTIFY_BEFORE:
+            when = "Adesso" if mins == 0 else f"Tra {mins} minut{'o' if mins == 1 else 'i'}"
+            body = " · ".join(x for x in [when, f"{start:%H:%M}–{end:%H:%M}", e["location"]] if x)
+            out.append((f"ev|{e['start']}|{e['title']}", e["title"], body))
+
+    # promemoria con orario: quando arriva l'ora (fino a 10 minuti dopo, se il server era fermo)
+    rems = all_reminders(load_reminders().get("items", []))
+    for r in rems:
+        if r.get("due") and not r.get("date_only"):
+            d = datetime.fromisoformat(r["due"])
+            if now - timedelta(minutes=10) < d <= now:
+                out.append((f"rem|{r['id']}|{r['due']}", "Promemoria", r["title"]))
+
+    # esame vicino: la mattina, se manca uno dei giorni di EXAM_NOTICE
+    if EXAM_AT <= now.time() and now.hour < 12:
+        exams, _ = get_exams(today)
+        for x in exams or []:
+            start = datetime.fromisoformat(x["start"])
+            days = (start.date() - today).days
+            if days in EXAM_NOTICE:
+                title = "Esame domani" if days == 1 else f"Esame tra {days} giorni"
+                body = f"{_exam_name(x['title'])} · {GIORNI[start.weekday()]} {start.day}" + ("" if x["all_day"] else f" alle {start:%H:%M}")
+                out.append((f"exam|{today}|{x['start']}|{x['title']}", title, body))
+
+    # riepilogo del mattino: eventi, meteo e cose da fare oggi
+    if MORNING_AT <= now.time() and now.hour < 11:
+        parts = []
+        if timed:
+            first = timed[0]
+            n = len(timed)
+            parts.append(f"{n} event{'o' if n == 1 else 'i'}, il primo alle {datetime.fromisoformat(first['start']):%H:%M}: {first['title']}")
+        else:
+            parts.append("Nessun evento oggi")
+        w = get_weather()
+        day = next((d for d in (w or {}).get("days", []) if d["date"] == today.isoformat()), None)
+        if day:
+            parts.append(f"{day['text']}, {day['min']}°–{day['max']}°")
+        todo = sum(1 for r in rems if not r.get("due") or datetime.fromisoformat(r["due"]).date() <= today)
+        if todo:
+            parts.append(f"{todo} cos{'a' if todo == 1 else 'e'} da fare")
+        out.append((f"morning|{today}", f"Buongiorno, {GIORNI[today.weekday()]} {today.day}", " · ".join(parts)))
+    return out
+
+
+def notifier():
+    """Gira in sottofondo: ogni 30 secondi guarda se c'è qualcosa da notificare."""
+    while True:
+        time.sleep(30)
+        try:
+            with _plock:
+                if not load_push()["subs"]:
+                    continue  # nessuno iscritto: non serve neanche chiedere il calendario
+            now = datetime.now(TZ)
+            for key, title, body in due_notifications(now):
+                with _plock:
+                    p = load_push()
+                    if key in p["sent"]:
+                        continue
+                    # la segna prima di mandarla: se l'invio fallisce non riprova ogni 30 secondi
+                    p["sent"][key] = now.date().isoformat()
+                    old = (now.date() - timedelta(days=2)).isoformat()
+                    p["sent"] = {k: v for k, v in p["sent"].items() if v >= old}  # dimentica quelle di giorni fa
+                    save_push(p)
+                push_send(title, body)
+        except Exception as exc:  # un errore (es. iCloud irraggiungibile) non deve fermare le notifiche per sempre
+            print(f"Notifiche: {exc}", flush=True)
+
+
 # ---------------------------------------------------------------- rotte
 @app.get("/")
 def index():
@@ -492,6 +654,46 @@ def api_todo_done(rid):
     return jsonify({"ok": True})
 
 
+@app.get("/api/push/key")
+def api_push_key():
+    return jsonify({"key": vapid_public_key()})
+
+
+@app.post("/api/push/subscribe")
+def api_push_subscribe():
+    """Iscrive un dispositivo: il corpo è quello che il browser dà con subscription.toJSON()."""
+    sub = request.get_json(silent=True) or {}
+    endpoint, keys = str(sub.get("endpoint", "")), sub.get("keys") or {}
+    if not _push_host_ok(endpoint) or not keys.get("p256dh") or not keys.get("auth"):
+        abort(400, "iscrizione non valida")
+    item = {"endpoint": endpoint, "keys": {"p256dh": str(keys["p256dh"]), "auth": str(keys["auth"])}}
+    with _plock:
+        p = load_push()
+        # se lo stesso dispositivo si iscrive di nuovo, sostituisce la vecchia iscrizione; al massimo 20 dispositivi
+        p["subs"] = ([s for s in p["subs"] if s["endpoint"] != endpoint] + [item])[-20:]
+        save_push(p)
+    return jsonify({"ok": True})
+
+
+@app.post("/api/push/unsubscribe")
+def api_push_unsubscribe():
+    endpoint = str((request.get_json(silent=True) or {}).get("endpoint", ""))
+    with _plock:
+        p = load_push()
+        p["subs"] = [s for s in p["subs"] if s["endpoint"] != endpoint]
+        save_push(p)
+    return jsonify({"ok": True})
+
+
+@app.post("/api/push/test")
+def api_push_test():
+    """Manda una notifica di prova solo al dispositivo che la chiede."""
+    endpoint = str((request.get_json(silent=True) or {}).get("endpoint", ""))
+    if not push_send("Notifiche attive", "Ti avviso prima degli eventi, all'ora dei promemoria e per gli esami.", only=endpoint):
+        abort(404, "dispositivo non iscritto")
+    return jsonify({"ok": True})
+
+
 @app.post("/api/refresh")
 def api_refresh():
     with _lock:
@@ -505,4 +707,5 @@ if __name__ == "__main__":
     from waitress import serve
 
     print(f"Dashboard su http://{HOST}:{PORT}  (demo={'sì' if DEMO else 'no'})")
+    threading.Thread(target=notifier, daemon=True).start()  # daemon: si ferma insieme al server
     serve(app, host=HOST, port=PORT)

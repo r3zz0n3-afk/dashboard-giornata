@@ -192,6 +192,27 @@ Poi installa l'app Tailscale sull'iPhone con lo stesso account. Il PC riceve un 
 usalo sia nel browser sia nell'URL del Comando Rapido.
 Non serve aprire porte sul router e la dashboard **resta privata**: la vedi solo dai tuoi dispositivi.
 
+### Notifiche sull'iPhone
+La dashboard può mandarti notifiche anche a pagina chiusa:
+- **evento tra poco**: 15 minuti prima di ogni evento (cambia con `NOTIFY_BEFORE=10` nel `.env`);
+- **promemoria**: all'ora del promemoria, se ha un orario;
+- **esame vicino**: alle 8, quando mancano 7, 3 o 1 giorno;
+- **riepilogo del mattino**: alle 7:30, con eventi, meteo e cose da fare.
+
+Su iPhone le notifiche web funzionano solo se la pagina è in **https** e la dashboard è **aggiunta alla schermata Home**.
+Tailscale dà un certificato https vero al server; sul server, una volta sola:
+
+```bash
+sudo tailscale serve --bg --https=8443 http://127.0.0.1:8080
+```
+
+La dashboard risponde allora anche su `https://NOME.TAILNET.ts.net:8443` (il nome completo lo dà `tailscale status --self`),
+sempre e solo per i tuoi dispositivi: `serve` non la pubblica su internet (quello sarebbe `funnel`).
+Sull'iPhone apri quell'indirizzo in Safari, **Condividi → Aggiungi alla schermata Home**, apri la dashboard dall'icona
+e tocca **Attiva notifiche** in fondo alla pagina. Arriva subito una notifica di prova.
+
+Il server firma le notifiche con una chiave che crea da solo in `data/vapid.pem`: se la cancelli, i telefoni vanno iscritti di nuovo.
+
 ---
 
 ## 5. Aggiornare il server con un comando
@@ -248,5 +269,8 @@ npm run build      # prima del commit: genera la versione finale, compressa
 | `.env` | Le tue impostazioni (privato, non condividerlo) |
 | `data/reminders.json` | Ultimi promemoria ricevuti dall'iPhone |
 | `data/todos.json` | Promemoria aggiunti dalla dashboard e spunte |
+| `data/push.json` | Dispositivi iscritti alle notifiche e notifiche già mandate |
+| `data/vapid.pem` | Chiave privata per firmare le notifiche (si crea da sola) |
+| `static/sw.js` | Service worker: mostra le notifiche anche a pagina chiusa |
 | `install.sh` | Installazione e servizio sempre attivo |
 | `deploy.sh` | Aggiorna il server da GitHub con un comando |
