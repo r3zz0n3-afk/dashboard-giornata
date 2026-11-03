@@ -310,8 +310,10 @@ def load_reminders():
 
 
 # ---------------------------------------------------------------- promemoria della dashboard
-# Apple non permette di scrivere nei Promemoria da fuori, quindi spunte e promemoria nuovi restano qui:
-# in data/todos.json ci sono {"items": [promemoria aggiunti], "done": [id dei promemoria Apple spuntati]}.
+# Apple non permette di scrivere nei Promemoria da fuori, quindi spunte e promemoria nuovi restano qui,
+# in data/todos.json: {"items": [promemoria aggiunti], "done": [{id, title, list} dei promemoria Apple spuntati]}.
+# È il Comando Rapido dell'iPhone a portarli in Apple: chiede /api/reminders/sync, chiude e crea i promemoria,
+# poi manda la lista aggiornata a /api/reminders, che fa pulizia (vedi sync_cleanup).
 _tlock = threading.Lock()
 
 
@@ -324,7 +326,9 @@ def _apple_id(r):
 def load_todos():
     try:
         t = json.loads(TODO_FILE.read_text(encoding="utf-8"))
-        return {"items": list(t.get("items", [])), "done": list(t.get("done", []))}
+        # le prime versioni salvavano solo l'id delle spunte: le trasforma nel formato nuovo
+        done = [d if isinstance(d, dict) else {"id": d, "title": "", "list": ""} for d in t.get("done", [])]
+        return {"items": list(t.get("items", [])), "done": done}
     except (OSError, json.JSONDecodeError):
         return {"items": [], "done": []}
 
@@ -338,10 +342,33 @@ def save_todos(t):
 def all_reminders(apple):
     """I promemoria da mostrare: quelli dell'iPhone non ancora spuntati qui, più quelli aggiunti dalla dashboard."""
     t = load_todos()
-    done = set(t["done"])
+    done = {d["id"] for d in t["done"]}
     out = [dict(r, id=_apple_id(r), source="apple") for r in apple]
     out = [r for r in out if r["id"] not in done]
     return out + [dict(r, source="dash") for r in t["items"]]
+
+
+def sync_cleanup(apple):
+    """Dopo che l'iPhone ha mandato la lista aggiornata:
+    - le spunte di promemoria che l'iPhone non manda più sono state chiuse in Apple: non servono più;
+    - i promemoria della dashboard già passati all'iPhone ora arrivano da Apple: tolti qui, per non vederli doppi."""
+    alive = {_apple_id(r) for r in apple}
+    titles = {r["title"].strip().lower() for r in apple}
+    with _tlock:
+        t = load_todos()
+        t["done"] = [d for d in t["done"] if d["id"] in alive]
+        t["items"] = [i for i in t["items"] if not (i.get("exported") and i["title"].strip().lower() in titles)]
+        save_todos(t)
+
+
+def _check_token():
+    """Gli indirizzi usati dal Comando Rapido vogliono il token del file .env (intestazione Authorization o ?token=)."""
+    if not TOKEN:
+        abort(503, "REMINDERS_TOKEN non impostato nel file .env")
+    sent = request.headers.get("Authorization", "").removeprefix("Bearer ").strip() \
+        or request.args.get("token", "")
+    if not secrets.compare_digest(sent, TOKEN):  # confronto a tempo costante: non rivela quanti caratteri sono giusti
+        abort(401)
 
 
 # ---------------------------------------------------------------- rotte
@@ -378,12 +405,7 @@ def api_dashboard():
 
 @app.post("/api/reminders")
 def api_reminders():
-    if not TOKEN:
-        abort(503, "REMINDERS_TOKEN non impostato nel file .env")
-    sent = request.headers.get("Authorization", "").removeprefix("Bearer ").strip() \
-        or request.args.get("token", "")
-    if sent != TOKEN:
-        abort(401)
+    _check_token()
     payload = request.get_json(silent=True)
     if payload is None:
         payload = request.get_data(as_text=True)
@@ -392,7 +414,27 @@ def api_reminders():
     tmp = REM_FILE.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
     tmp.replace(REM_FILE)
+    sync_cleanup(items)
     return jsonify({"ok": True, "ricevuti": len(items)})
+
+
+@app.get("/api/reminders/sync")
+def api_reminders_sync():
+    """Per il Comando Rapido: cosa fare in Apple. "done" = da segnare completati, "new" = da creare.
+    "due" è nel formato "2026-11-04 17:30" (o solo la data), che Comandi Rapidi sa leggere come data."""
+    _check_token()
+    with _tlock:
+        t = load_todos()
+        new = []
+        for i in t["items"]:
+            i["exported"] = True  # da qui in poi, quando arriva da Apple con lo stesso titolo, si toglie dalla dashboard
+            due = ""
+            if i.get("due"):
+                d = datetime.fromisoformat(i["due"])
+                due = d.strftime("%Y-%m-%d") if i.get("date_only") else d.strftime("%Y-%m-%d %H:%M")
+            new.append({"title": i["title"], "due": due})
+        save_todos(t)
+    return jsonify({"done": [{"title": d["title"], "list": d["list"]} for d in t["done"] if d["title"]], "new": new})
 
 
 @app.post("/api/todos")
@@ -427,8 +469,11 @@ def api_todo_done(rid):
             t["items"] = [i for i in t["items"] if i["id"] != rid]
         else:
             # tiene solo le spunte di promemoria che l'iPhone manda ancora: la lista non cresce all'infinito
-            alive = {_apple_id(r) for r in load_reminders().get("items", [])}
-            t["done"] = [x for x in t["done"] if x in alive and x != rid] + [rid]
+            # salva anche titolo ed elenco: l'iPhone li cerca per nome, l'id non sa calcolarlo
+            r = next((r for r in load_reminders().get("items", []) if _apple_id(r) == rid), None)
+            if r is None:
+                abort(404)
+            t["done"] = [d for d in t["done"] if d["id"] != rid] + [{"id": rid, "title": r["title"], "list": r.get("list", "")}]
         save_todos(t)
     return jsonify({"ok": True})
 

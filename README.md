@@ -124,12 +124,40 @@ Apri l'app **Comandi Rapidi**, tocca **+** e chiamalo "Invia promemoria". Poi ag
 
 Premi ▶︎ per provarlo. Se funziona vedi una risposta tipo `{"ok": true, "ricevuti": 7}` e i promemoria compaiono nella dashboard.
 
-### Spuntare e aggiungere dalla dashboard
-Apple non permette di scrivere nei Promemoria da fuori, quindi quello che fai nella dashboard **resta nella dashboard**:
-- spuntando un promemoria arrivato dall'iPhone, sparisce dalla dashboard ma **resta aperto nell'app Promemoria**;
-- quelli aggiunti con "+ Nuovo promemoria" esistono solo nella dashboard.
+### Spuntare e aggiungere dalla dashboard (e portarli sull'iPhone)
+Nella dashboard puoi spuntare i promemoria e aggiungerne di nuovi. Apple però non permette di scrivere nei Promemoria
+da fuori: è lo stesso Comando Rapido a portare le modifiche sull'iPhone, **la prossima volta che parte**.
+Il server gli prepara la lista di cosa fare all'indirizzo `/api/reminders/sync`:
+```json
+{"done": [{"title": "Studiare reti", "list": "Università"}],
+ "new":  [{"title": "Comprare il pane", "due": "2026-11-04 17:30"}]}
+```
+- `done`: promemoria spuntati nella dashboard, da segnare come **completati** (restano nella sezione Completati, si possono recuperare);
+- `new`: promemoria aggiunti nella dashboard, da **creare** in Apple. Dopo, arrivano dall'iPhone come gli altri e la dashboard toglie la sua copia.
 
-Spunte e promemoria nuovi sono salvati nel file `data/todos.json` del server.
+Apri il comando "Invia promemoria" e aggiungi queste azioni **all'inizio**, prima di *Trova promemoria*:
+
+1. **Ottieni contenuto dell'URL**
+   - URL: `http://IP-DEL-PC:8080/api/reminders/sync`
+   - *Mostra di più*: metodo **GET**, intestazione `Authorization` con valore `Bearer IL-TUO-TOKEN` (come per l'invio).
+2. **Ottieni valore del dizionario**: chiave `done`, dal *Contenuto dell'URL*.
+3. **Ripeti con ogni elemento** (sul valore appena ottenuto). Dentro il ciclo:
+   1. **Ottieni valore del dizionario**: chiave `title`, da *Elemento ripetuto*.
+   2. **Trova promemoria**, con due filtri: *Titolo* **è** il valore appena ottenuto, e *Completato* **è disattivato**.
+   3. L'azione che modifica un promemoria (cerca "Completato" tra le azioni dei Promemoria):
+      imposta **Completato** su attivo per i *Promemoria* trovati.
+4. Dopo *Fine ripetizione*: **Ottieni valore del dizionario**, chiave `new`, sempre dal *Contenuto dell'URL*
+   (tocca il campo e scegli la variabile *Contenuto dell'URL*, non il risultato precedente).
+5. **Ripeti con ogni elemento**. Dentro il ciclo:
+   1. **Ottieni valore del dizionario**: chiave `title`, da *Elemento ripetuto*.
+   2. **Ottieni valore del dizionario**: chiave `due`, da *Elemento ripetuto*.
+   3. **Ottieni date dall'input**, con il valore `due`. Se il promemoria non ha data, resta vuoto.
+   4. **Aggiungi nuovo promemoria**: titolo il valore `title`; in *Mostra di più* attiva l'avviso **In una data** e scegli le *Date*.
+
+Poi il comando continua come prima: trova i promemoria e li manda alla dashboard.
+
+> Se due promemoria aperti hanno lo **stesso titolo**, spuntarne uno nella dashboard li chiude **tutti e due** su Apple:
+> il Comando Rapido li cerca per nome.
 
 ### Rendilo automatico
 Nell'app Comandi Rapidi vai su **Automazione**, poi tocca **+**. Due idee, anche insieme:
