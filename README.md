@@ -133,7 +133,8 @@ Il server gli prepara la lista di cosa fare all'indirizzo `/api/reminders/sync`:
  "new":  [{"title": "Comprare il pane", "due": "2026-11-04 17:30"}]}
 ```
 - `done`: promemoria spuntati nella dashboard, da segnare come **completati** (restano nella sezione Completati, si possono recuperare);
-- `new`: promemoria aggiunti nella dashboard, da **creare** in Apple. Dopo, arrivano dall'iPhone come gli altri e la dashboard toglie la sua copia.
+- `new`: promemoria aggiunti nella dashboard, da **creare** in Apple. Al successivo invio dell'iPhone la dashboard toglie la sua copia:
+  da lì in poi vale la lista di Apple, quindi se lo cancelli o lo completi sull'iPhone sparisce anche dalla dashboard.
 
 Crea un secondo comando, ad esempio **"Ricevo promemoria aggiornati"**, con queste azioni.
 (Puoi anche metterle all'inizio di "Invia promemoria", prima di *Trova promemoria*: fanno la stessa cosa.)
@@ -160,7 +161,7 @@ azione "Esegui comando → Ricevo promemoria aggiornati". Insieme all'automazion
 il giro si chiude: aprendo Promemoria arrivano le modifiche della dashboard, chiudendolo la dashboard riceve la lista aggiornata.
 
 Un promemoria nuovo, una volta consegnato, non viene rimandato per 10 minuti, anche se il comando parte più volte: niente doppioni.
-Se dopo 10 minuti non è ancora arrivato da Apple (ad esempio perché il comando si è fermato a metà), viene consegnato di nuovo.
+Se dopo 10 minuti l'iPhone non ha ancora mandato la lista (ad esempio perché il comando si è fermato a metà), viene consegnato di nuovo.
 Le spunte invece vengono rimandate finché l'iPhone non manda la lista aggiornata, ma non fa danni:
 il filtro *Completato è disattivato* trova solo quelli ancora aperti.
 

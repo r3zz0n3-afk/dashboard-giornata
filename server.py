@@ -352,14 +352,15 @@ def all_reminders(apple):
 def sync_cleanup(apple):
     """Dopo che l'iPhone ha mandato la lista aggiornata:
     - le spunte di promemoria che l'iPhone non manda più sono state chiuse in Apple: non servono più;
-    - i promemoria della dashboard già passati all'iPhone ora arrivano da Apple: tolti qui, per non vederli doppi."""
+    - i promemoria della dashboard già consegnati all'iPhone si tolgono da qui: da ora vale la lista di Apple.
+      Se ci sono, arrivano da Apple (e non li vedi doppi); se non ci sono, li hai cancellati o completati sull'iPhone."""
     alive = {_apple_id(r) for r in apple}
     titles = {r["title"].strip().lower() for r in apple}
     with _tlock:
         t = load_todos()
         # le spunte dei promemoria nati nella dashboard (id "d...") restano finché l'iPhone ne manda uno con quel titolo
         t["done"] = [d for d in t["done"] if d["id"] in alive or (d["id"].startswith("d") and d["title"].strip().lower() in titles)]
-        t["items"] = [i for i in t["items"] if not (i.get("exported") and i["title"].strip().lower() in titles)]
+        t["items"] = [i for i in t["items"] if not i.get("exported")]
         save_todos(t)
 
 
@@ -431,8 +432,8 @@ def api_reminders_sync():
         now = time.time()
         for i in t["items"]:
             # Un promemoria consegnato non si rimanda subito: se il comando partisse due volte prima che l'iPhone
-            # rimandi la lista, verrebbe creato doppio. Se però dopo RESEND_SECONDS non è ancora arrivato da Apple
-            # (il comando si è fermato a metà), si rimanda. Quando arriva da Apple con lo stesso titolo, si toglie da qui.
+            # rimandi la lista, verrebbe creato doppio. Se però sono passati RESEND_SECONDS
+            # e l'iPhone non ha ancora rimandato la lista, si rimanda. Al prossimo invio dell'iPhone si toglie da qui.
             sent = i.get("exported")
             if sent and (sent is True or now - sent < RESEND_SECONDS):
                 continue
