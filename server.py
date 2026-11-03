@@ -39,6 +39,7 @@ DATA = BASE / "data"
 DATA.mkdir(exist_ok=True)
 REM_FILE = DATA / "reminders.json"
 TODO_FILE = DATA / "todos.json"  # promemoria aggiunti dalla dashboard e spunte
+RESEND_SECONDS = 600  # dopo quanto rimandare all'iPhone un promemoria nuovo che non è ancora arrivato in Apple
 
 # colori dei tag di Notion: la pagina li traduce in classi CSS (c-blue, c-orange, ...)
 PALETTE = ["blue", "orange", "green", "pink", "yellow", "brown", "red", "gray"]
@@ -426,12 +427,15 @@ def api_reminders_sync():
     with _tlock:
         t = load_todos()
         new = []
+        now = time.time()
         for i in t["items"]:
-            # ogni promemoria nuovo si manda una volta sola: se il comando partisse due volte prima che l'iPhone
-            # rimandi la lista, verrebbe creato doppio. Quando arriva da Apple con lo stesso titolo, si toglie da qui.
-            if i.get("exported"):
+            # Un promemoria consegnato non si rimanda subito: se il comando partisse due volte prima che l'iPhone
+            # rimandi la lista, verrebbe creato doppio. Se però dopo RESEND_SECONDS non è ancora arrivato da Apple
+            # (il comando si è fermato a metà), si rimanda. Quando arriva da Apple con lo stesso titolo, si toglie da qui.
+            sent = i.get("exported")
+            if sent and (sent is True or now - sent < RESEND_SECONDS):
                 continue
-            i["exported"] = True
+            i["exported"] = now
             due = ""
             if i.get("due"):
                 d = datetime.fromisoformat(i["due"])

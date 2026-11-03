@@ -159,7 +159,8 @@ Per farlo partire da solo: **Automazione → + → App → Promemoria → "Viene
 azione "Esegui comando → Ricevo promemoria aggiornati". Insieme all'automazione "Viene chiusa" di "Invia promemoria"
 il giro si chiude: aprendo Promemoria arrivano le modifiche della dashboard, chiudendolo la dashboard riceve la lista aggiornata.
 
-Ogni promemoria nuovo viene consegnato **una volta sola**, anche se il comando parte più volte: niente doppioni.
+Un promemoria nuovo, una volta consegnato, non viene rimandato per 10 minuti, anche se il comando parte più volte: niente doppioni.
+Se dopo 10 minuti non è ancora arrivato da Apple (ad esempio perché il comando si è fermato a metà), viene consegnato di nuovo.
 Le spunte invece vengono rimandate finché l'iPhone non manda la lista aggiornata, ma non fa danni:
 il filtro *Completato è disattivato* trova solo quelli ancora aperti.
 
