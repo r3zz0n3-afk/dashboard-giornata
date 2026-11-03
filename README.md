@@ -213,6 +213,26 @@ e tocca **Attiva notifiche** in fondo alla pagina. Arriva subito una notifica di
 
 Il server firma le notifiche con una chiave che crea da solo in `data/vapid.pem`: se la cancelli, i telefoni vanno iscritti di nuovo.
 
+### Spotify
+Un mini player nella Home: cosa stai ascoltando (su iPhone, PC o casse), con play/pausa/avanti/indietro;
+quando non suona niente mostra l'ultimo brano ascoltato. I comandi funzionano solo con **Spotify Premium**,
+e Spotify chiede Premium anche al proprietario dell'app sviluppatore.
+
+1. Vai su [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard), accedi e **Create app**.
+2. Nome e descrizione a piacere. In **Redirect URIs** scrivi l'indirizzo https della dashboard seguito da
+   `/api/spotify/callback`, ad esempio `https://NOME.TAILNET.ts.net:8443/api/spotify/callback`. In **APIs used** spunta **Web API**.
+3. Nelle impostazioni dell'app copia **Client ID** e **Client secret** nel file `.env`:
+
+   ```
+   SPOTIFY_CLIENT_ID=...
+   SPOTIFY_CLIENT_SECRET=...
+   SPOTIFY_REDIRECT=https://NOME.TAILNET.ts.net:8443/api/spotify/callback
+   ```
+4. Riavvia il servizio, apri la dashboard e tocca **Collega Spotify**: Spotify chiede il permesso e ti riporta alla dashboard.
+
+L'accesso all'account resta in `data/spotify.json`. Per scollegare Spotify cancella quel file
+(o togli l'accesso da spotify.com → Account → App).
+
 ---
 
 ## 5. Aggiornare il server con un comando
@@ -270,6 +290,7 @@ npm run build      # prima del commit: genera la versione finale, compressa
 | `data/reminders.json` | Ultimi promemoria ricevuti dall'iPhone |
 | `data/todos.json` | Promemoria aggiunti dalla dashboard e spunte |
 | `data/push.json` | Dispositivi iscritti alle notifiche e notifiche già mandate |
+| `data/spotify.json` | Accesso al tuo account Spotify (si crea quando lo colleghi) |
 | `data/vapid.pem` | Chiave privata per firmare le notifiche (si crea da sola) |
 | `static/sw.js` | Service worker: mostra le notifiche anche a pagina chiusa |
 | `install.sh` | Installazione e servizio sempre attivo |

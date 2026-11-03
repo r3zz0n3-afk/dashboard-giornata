@@ -68,6 +68,9 @@
       <div id="examList" class="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 [scrollbar-width:none] md:mx-0 md:grid md:grid-cols-4 md:overflow-visible md:px-0"></div>
     </section>
 
+    <!-- Spotify: cosa stai ascoltando e i comandi. Compare solo se Spotify è configurato nel file .env; lo riempie script.js -->
+    <section id="music" hidden aria-label="Musica" class="note mt-7 bg-rose p-4 md:mt-8 md:p-5"></section>
+
     <div class="mt-7 grid items-start gap-6 md:mt-8 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
       <section>
         <h2 class="mb-3 flex items-baseline gap-2 px-1 font-mono text-xs font-medium tracking-[.08em] text-muted uppercase md:text-[13px]">Oggi <span id="hCount" class="text-ink tabular-nums"></span><span id="hWeather" class="ml-auto font-sans text-[13px] tracking-normal text-muted normal-case"></span></h2>

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Dashboard giornata: calendario iCloud (CalDAV) + Promemoria (via Comando Rapido iPhone)."""
+import base64
 import hashlib
 import json
 import os
@@ -10,12 +11,13 @@ import time
 from datetime import date, datetime, timedelta, time as dtime
 from pathlib import Path
 from urllib.parse import urlencode
-from urllib.request import urlopen
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
 from cryptography.hazmat.primitives import serialization
 from dotenv import load_dotenv
-from flask import Flask, abort, jsonify, request, send_from_directory
+from flask import Flask, abort, jsonify, redirect, request, send_from_directory
 from py_vapid import Vapid01, b64urlencode
 from pywebpush import WebPushException, webpush
 
@@ -51,6 +53,10 @@ NOTIFY_BEFORE = int(os.getenv("NOTIFY_BEFORE", "15"))  # minuti di anticipo per 
 MORNING_AT = dtime(7, 30)  # riepilogo del mattino
 EXAM_AT = dtime(8)  # avviso esami
 EXAM_NOTICE = (7, 3, 1)  # giorni prima dell'esame in cui avvisare
+SPOTIFY_ID = os.getenv("SPOTIFY_CLIENT_ID", "").strip()
+SPOTIFY_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET", "").strip()
+SPOTIFY_REDIRECT = os.getenv("SPOTIFY_REDIRECT", "").strip()  # es. https://homelab.xxx.ts.net:8443/api/spotify/callback
+SPOTIFY_FILE = DATA / "spotify.json"  # il "refresh token" di Spotify: segreto, si crea quando colleghi l'account
 
 # colori dei tag di Notion: la pagina li traduce in classi CSS (c-blue, c-orange, ...)
 PALETTE = ["blue", "orange", "green", "pink", "yellow", "brown", "red", "gray"]
@@ -536,6 +542,117 @@ def notifier():
             print(f"Notifiche: {exc}", flush=True)
 
 
+# ---------------------------------------------------------------- spotify
+# Il mini player è un telecomando: chiede a Spotify cosa suona sui tuoi dispositivi e manda play/pausa/avanti/indietro.
+# Il login è OAuth: /api/spotify/login ti porta da Spotify, che dopo il tuo "sì" torna a /api/spotify/callback con un codice;
+# il server lo scambia con un access token (dura un'ora) e un refresh token (per chiederne di nuovi senza rifare il login).
+SPOTIFY_SCOPES = "user-read-playback-state user-modify-playback-state user-read-recently-played"
+SPOTIFY_CMDS = {"play": ("PUT", "/me/player/play"), "pause": ("PUT", "/me/player/pause"),
+                "next": ("POST", "/me/player/next"), "previous": ("POST", "/me/player/previous")}
+_slock = threading.Lock()
+_spot = {"state": None, "at": 0.0, "data": None, "last_at": 0.0, "last": None}
+
+
+def _spotify_auth(form):
+    """Chiede un token a Spotify, presentandosi con l'id e il segreto dell'app."""
+    basic = base64.b64encode(f"{SPOTIFY_ID}:{SPOTIFY_SECRET}".encode()).decode()
+    req = Request("https://accounts.spotify.com/api/token", data=urlencode(form).encode(),
+                  headers={"Authorization": f"Basic {basic}", "Content-Type": "application/x-www-form-urlencoded"})
+    with urlopen(req, timeout=10) as r:
+        return json.load(r)
+
+
+def _spotify_save(t):
+    SPOTIFY_FILE.write_text(json.dumps(t), encoding="utf-8")
+    SPOTIFY_FILE.chmod(0o600)  # dentro c'è l'accesso al tuo account: leggibile solo dal tuo utente
+
+
+def _spotify_token(force=False):
+    """L'access token valido; se sta per scadere ne chiede uno nuovo col refresh token. None = account non collegato."""
+    with _slock:
+        try:
+            t = json.loads(SPOTIFY_FILE.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        if force or time.time() > t["expires_at"] - 60:
+            try:
+                new = _spotify_auth({"grant_type": "refresh_token", "refresh_token": t["refresh_token"]})
+            except HTTPError as exc:
+                if exc.code == 400:  # accesso revocato da Spotify o dall'account: va ricollegato
+                    SPOTIFY_FILE.unlink(missing_ok=True)
+                    return None
+                raise
+            t.update(access_token=new["access_token"], expires_at=time.time() + new["expires_in"],
+                     refresh_token=new.get("refresh_token", t["refresh_token"]))  # a volte Spotify ne manda uno nuovo
+            _spotify_save(t)
+        return t["access_token"]
+
+
+def spotify_api(method, path, retry=True):
+    """Chiama la Web API di Spotify. Ritorna (codice HTTP, risposta JSON o None)."""
+    token = _spotify_token()
+    if not token:
+        return 401, None
+    req = Request("https://api.spotify.com/v1" + path, method=method, headers={"Authorization": f"Bearer {token}"},
+                  data=b"" if method in ("PUT", "POST") else None)
+    try:
+        with urlopen(req, timeout=10) as r:
+            body = r.read()
+            return r.status, json.loads(body) if body else None  # 204 = risposta vuota (es. niente in riproduzione)
+    except HTTPError as exc:
+        if exc.code == 401 and retry:  # token scaduto prima del previsto: lo rinnova e riprova una volta
+            _spotify_token(force=True)
+            return spotify_api(method, path, False)
+        try:
+            return exc.code, json.loads(exc.read() or b"null")
+        except json.JSONDecodeError:
+            return exc.code, None
+
+
+def _track(item):
+    """Brano o puntata di podcast, ridotto a quello che serve alla pagina."""
+    if not item:
+        return None
+    ep = item.get("type") == "episode"
+    imgs = (item.get("images") if ep else item.get("album", {}).get("images")) or []
+    return {"title": item.get("name", ""),
+            "artist": item.get("show", {}).get("name", "") if ep else ", ".join(a["name"] for a in item.get("artists", [])),
+            "image": (imgs[1] if len(imgs) > 1 else imgs[0])["url"] if imgs else None,  # le copertine vanno dalla più grande: la media basta
+            "url": item.get("external_urls", {}).get("spotify"),
+            "duration": item.get("duration_ms", 0)}
+
+
+def get_spotify():
+    if not (SPOTIFY_ID and SPOTIFY_SECRET and SPOTIFY_REDIRECT):
+        return None  # Spotify non configurato: la pagina non mostra il player
+    if not SPOTIFY_FILE.exists():
+        return {"connected": False}
+    # la pagina chiede ogni 10 secondi (e i dispositivi possono essere più d'uno): Spotify viene interrogato al massimo ogni 4
+    if time.time() - _spot["at"] < 4 and _spot["data"]:
+        return _spot["data"]
+    try:
+        status, p = spotify_api("GET", "/me/player?additional_types=episode")
+        if status == 401:
+            return {"connected": False}
+        if status == 200 and p and p.get("item"):
+            dev = p.get("device") or {}
+            out = {"connected": True, "playing": p["is_playing"], "track": _track(p["item"]), "progress": p.get("progress_ms") or 0,
+                   "device": dev.get("name"), "last": False}
+        else:
+            # niente in riproduzione: l'ultimo brano ascoltato, chiesto al massimo una volta al minuto
+            if time.time() - _spot["last_at"] > 60:
+                _, r = spotify_api("GET", "/me/player/recently-played?limit=1")
+                items = (r or {}).get("items") or []
+                _spot.update(last_at=time.time(), last=items[0] if items else None)
+            last = _spot["last"]
+            out = {"connected": True, "playing": False, "track": _track(last["track"]) if last else None, "progress": 0,
+                   "device": None, "last": True, "played_at": last["played_at"] if last else None}
+    except Exception as exc:
+        out = {"connected": True, "error": f"Spotify non raggiungibile: {exc}"}
+    _spot.update(at=time.time(), data=out)
+    return out
+
+
 # ---------------------------------------------------------------- rotte
 @app.get("/")
 def index():
@@ -691,6 +808,51 @@ def api_push_test():
     endpoint = str((request.get_json(silent=True) or {}).get("endpoint", ""))
     if not push_send("Notifiche attive", "Ti avviso prima degli eventi, all'ora dei promemoria e per gli esami.", only=endpoint):
         abort(404, "dispositivo non iscritto")
+    return jsonify({"ok": True})
+
+
+@app.get("/api/spotify")
+def api_spotify():
+    return jsonify(get_spotify())
+
+
+@app.get("/api/spotify/login")
+def api_spotify_login():
+    if get_spotify() is None:
+        abort(503, "Spotify non configurato: imposta SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET e SPOTIFY_REDIRECT nel file .env")
+    # "state" è un numero a caso che Spotify ci rimanda indietro: se non torna uguale, il ritorno non è partito da qui
+    _spot["state"] = secrets.token_urlsafe(16)
+    return redirect("https://accounts.spotify.com/authorize?" + urlencode({
+        "client_id": SPOTIFY_ID, "response_type": "code", "redirect_uri": SPOTIFY_REDIRECT,
+        "scope": SPOTIFY_SCOPES, "state": _spot["state"]}))
+
+
+@app.get("/api/spotify/callback")
+def api_spotify_callback():
+    expected, _spot["state"] = _spot["state"], None  # vale una volta sola
+    if not expected or not secrets.compare_digest(request.args.get("state", ""), expected):
+        abort(400, "Ritorno da Spotify non valido: riprova a collegare l'account dalla dashboard")
+    if "code" not in request.args:  # hai premuto "Annulla" da Spotify
+        return redirect("/")
+    t = _spotify_auth({"grant_type": "authorization_code", "code": request.args["code"], "redirect_uri": SPOTIFY_REDIRECT})
+    with _slock:
+        _spotify_save({"access_token": t["access_token"], "refresh_token": t["refresh_token"],
+                       "expires_at": time.time() + t["expires_in"]})
+    _spot["at"] = 0.0
+    return redirect("/")
+
+
+@app.post("/api/spotify/<cmd>")
+def api_spotify_cmd(cmd):
+    if cmd not in SPOTIFY_CMDS or get_spotify() is None:
+        abort(404)
+    status, p = spotify_api(*SPOTIFY_CMDS[cmd])
+    _spot["at"] = 0.0  # la prossima richiesta chiede a Spotify lo stato nuovo
+    if status == 404:
+        return jsonify({"ok": False, "error": "Nessun dispositivo attivo: apri Spotify sul telefono o sul PC"}), 409
+    if status >= 300:
+        msg = ((p or {}).get("error") or {}).get("message", "") if isinstance(p, dict) else ""
+        return jsonify({"ok": False, "error": f"Spotify ha risposto {status} {msg}".strip()}), 502
     return jsonify({"ok": True})
 
 

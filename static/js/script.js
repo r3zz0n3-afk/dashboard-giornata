@@ -507,8 +507,101 @@ $("push").onclick = async e => {
   renderPush();
 };
 
-$("refresh").onclick = () => load(true);
+// Spotify: la pagina chiede al server cosa suona ogni 10 secondi; nel frattempo la barra avanza da sola,
+// calcolata dal momento dell'ultima risposta. Il blocco si ridisegna solo se cambia qualcosa (brano, pausa, dispositivo).
+let music = null, musicAt = 0, musicSig = "";
+const mmss = ms => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
+const SVG = d => `<svg viewBox="0 0 24 24" aria-hidden="true" class="size-5 fill-current"><path d="${d}"/></svg>`;
+const ICON = {
+  play: SVG("M8 5.5v13l11-6.5z"), pause: SVG("M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"),
+  next: SVG("M6 5.5v13l9-6.5zM16.5 5H19v14h-2.5z"), previous: SVG("M18 5.5v13L9 12zM5 5h2.5v14H5z"),
+};
+const SKIP = "grid size-10 cursor-pointer place-items-center rounded-full transition hover:bg-black/10 active:scale-92";
+const musicPos = () => Math.min(music.track.duration, music.progress + (music.playing ? Date.now() - musicAt : 0));
+
+async function loadMusic() {
+  try {
+    music = await (await fetch("api/spotify", { cache: "no-store" })).json();
+    musicAt = Date.now();
+  } catch { return; }  // server irraggiungibile: lo segnala già il resto della pagina
+  renderMusic();
+}
+
+function renderMusic() {
+  const el = $("music"), m = music;
+  el.hidden = !m;
+  const sig = JSON.stringify(m && { ...m, progress: 0 });
+  if (!m || sig === musicSig) return tickMusic();
+  musicSig = sig;
+  if (!m.connected) {
+    el.innerHTML = `<div class="flex flex-wrap items-center justify-between gap-3">
+      <p><span class="font-semibold">Spotify</span> <span class="text-muted">· non collegato</span></p>
+      <a href="api/spotify/login" class="inline-flex h-10 items-center rounded-full bg-black px-5 text-sm font-medium text-white transition hover:opacity-85 active:scale-96">Collega Spotify</a></div>`;
+    return;
+  }
+  if (m.error || !m.track) {
+    el.innerHTML = `<p class="text-sm text-muted">${esc(m.error || "Niente in ascolto")}</p>`;
+    return;
+  }
+  const t = m.track, when = m.played_at ? new Date(m.played_at) : null;
+  const label = m.last ? `Ultimo ascolto${when ? " · " + (dayStart(when).getTime() === dayStart(new Date()).getTime() ? "oggi alle " + hm(when) : when.toLocaleDateString("it-IT", { day: "numeric", month: "short" })) : ""}`
+    : `${m.playing ? "In ascolto" : "In pausa"}${m.device ? " su " + m.device : ""}`;
+  el.innerHTML = `
+    <div class="flex items-center gap-3.5 md:gap-4">
+      <a href="${esc(t.url)}" target="_blank" rel="noopener" aria-label="Apri in Spotify" class="shrink-0">
+        ${t.image ? `<img src="${esc(t.image)}" alt="" class="size-16 rounded-[10px] object-cover md:size-[72px]">` : `<span class="block size-16 rounded-[10px] bg-black/10 md:size-[72px]"></span>`}
+      </a>
+      <div class="min-w-0 flex-1">
+        <p class="truncate font-mono text-[11px] font-medium tracking-[.08em] text-muted uppercase">${esc(label)}</p>
+        <p class="mt-0.5 truncate font-semibold">${esc(t.title)}</p>
+        <p class="truncate text-sm text-muted">${esc(t.artist)}</p>
+      </div>
+      ${m.last ? "" : `<div class="flex shrink-0 items-center gap-0.5">
+        <button type="button" data-cmd="previous" aria-label="Brano precedente" class="${SKIP} max-sm:hidden">${ICON.previous}</button>
+        <button type="button" data-cmd="${m.playing ? "pause" : "play"}" aria-label="${m.playing ? "Pausa" : "Riproduci"}"
+          class="grid size-11 cursor-pointer place-items-center rounded-full bg-black text-white transition hover:opacity-85 active:scale-92">${m.playing ? ICON.pause : ICON.play}</button>
+        <button type="button" data-cmd="next" aria-label="Brano successivo" class="${SKIP}">${ICON.next}</button>
+      </div>`}
+    </div>
+    ${m.last ? "" : `<div class="mt-3.5 flex items-center gap-2.5 font-mono text-[11px] text-muted tabular-nums">
+      <span id="mPos" class="w-8"></span>
+      <div class="h-1 flex-1 overflow-hidden rounded-full bg-black/10"><div id="mBar" class="h-full rounded-full bg-black"></div></div>
+      <span class="w-8 text-right">${mmss(t.duration)}</span>
+    </div>`}`;
+  tickMusic();
+}
+
+// ogni secondo: solo il tempo e la barra, senza ridisegnare il resto
+function tickMusic() {
+  if (!music?.track || music.last || !$("mPos")) return;
+  const pos = musicPos();
+  $("mPos").textContent = mmss(pos);
+  $("mBar").style.width = `${music.track.duration ? pos / music.track.duration * 100 : 0}%`;
+}
+
+$("music").onclick = async e => {
+  const btn = e.target.closest("[data-cmd]");
+  if (!btn) return;
+  const cmd = btn.dataset.cmd;
+  if (cmd === "play" || cmd === "pause") {  // cambia subito l'icona, senza aspettare Spotify
+    music = { ...music, progress: musicPos(), playing: cmd === "play" };
+    musicAt = Date.now();
+    renderMusic();
+  }
+  try {
+    const r = await fetch(`api/spotify/${cmd}`, { method: "POST" });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
+  } catch (err) {
+    $("alerts").innerHTML = notice(err.message);
+  }
+  setTimeout(loadMusic, 700);  // Spotify ci mette un attimo ad aggiornare lo stato
+};
+
+$("refresh").onclick = () => { load(true); loadMusic(); };
 renderPush();
+loadMusic();
+setInterval(tickMusic, 1000);
+setInterval(() => { if (!document.hidden && view === "home") loadMusic(); }, 10000);
 addEventListener("hashchange", route);
 route();                             // sceglie la schermata e disegna subito data e orologio, senza aspettare il server
 load();
@@ -518,6 +611,6 @@ setInterval(() => load(), 5 * 60000); // ricarica i dati ogni 5 minuti
 document.addEventListener(
   "visibilitychange",
   () => {
-    if (!document.hidden) load();
+    if (!document.hidden) { load(); loadMusic(); }
   }
 );
