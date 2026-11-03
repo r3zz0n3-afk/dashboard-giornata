@@ -32,7 +32,7 @@
   </div>
   <div class="text-muted">Caricamento<span aria-hidden="true" class="*:opacity-0 *:animate-dot [&>:nth-child(2)]:[animation-delay:.2s] [&>:nth-child(3)]:[animation-delay:.4s]"><span>.</span><span>.</span><span>.</span></span></div>
 </div>
-<main aria-busy="true" class="mx-auto max-w-[1100px] px-4 pt-6 pb-28 md:px-8 md:pt-8 md:pb-10">
+<main aria-busy="true" class="mx-auto max-w-[1100px] px-4 pt-6 pb-28 in-[.island]:pt-[68px] md:px-8 md:pt-8 md:pb-10 md:in-[.island]:pt-8">
   <!-- Da computer: due pillole per scegliere la schermata, quella aperta è nera (sul telefono la barra è in basso) -->
   <nav aria-label="Schermate" class="mb-8 hidden md:flex">
     <div class="inline-flex gap-1 rounded-full border border-rule p-1">
@@ -67,9 +67,6 @@
       <h2 class="mb-3 flex items-baseline gap-2 px-1 font-mono text-xs font-medium tracking-[.08em] text-muted uppercase md:text-[13px]">Esami <span id="examCount" class="text-ink tabular-nums"></span></h2>
       <div id="examList" class="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 [scrollbar-width:none] md:mx-0 md:grid md:grid-cols-4 md:overflow-visible md:px-0"></div>
     </section>
-
-    <!-- Spotify: cosa stai ascoltando e i comandi. Compare solo se Spotify è configurato nel file .env; lo riempie script.js -->
-    <section id="music" hidden aria-label="Musica" class="note mt-7 bg-rose p-4 md:mt-8 md:p-5"></section>
 
     <div class="mt-7 grid items-start gap-6 md:mt-8 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
       <section>
@@ -142,6 +139,15 @@
       transition hover:opacity-85 active:scale-96 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent md:h-8">Aggiorna</button>
   </footer>
 </main>
+
+<!-- Spotify come la Dynamic Island: una pillola nera fissa in alto al centro, che toccata si allarga nel player.
+     Le misure cambiano con data-expanded e la transizione le anima; la curva imita la "molla" dell'iPhone.
+     Compare solo se Spotify è configurato nel file .env; il contenuto lo scrive script.js. -->
+<div id="island" hidden role="region" aria-label="Spotify"
+  class="group fixed top-[calc(env(safe-area-inset-top)+10px)] left-1/2 z-[6] h-10 w-[236px] -translate-x-1/2 overflow-hidden rounded-[20px]
+  bg-black text-white shadow-[0_10px_30px_rgba(0,0,0,.28)] ring-1 ring-white/10 [body.loading_&]:invisible
+  transition-[width,height,border-radius] duration-500 ease-[cubic-bezier(.32,.72,0,1)]
+  data-expanded:h-[192px] data-expanded:w-[min(calc(100vw-24px),400px)] data-expanded:rounded-[34px] md:top-8"></div>
 
 <!-- Sul telefono: la barra in basso, con lo spazio per la barra di sistema dell'iPhone (safe-area). -->
 <nav aria-label="Schermate" class="fixed inset-x-0 bottom-0 z-[5] flex border-t border-rule bg-surface pb-[env(safe-area-inset-bottom)] md:hidden">
