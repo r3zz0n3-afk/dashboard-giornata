@@ -357,7 +357,8 @@ def sync_cleanup(apple):
     titles = {r["title"].strip().lower() for r in apple}
     with _tlock:
         t = load_todos()
-        t["done"] = [d for d in t["done"] if d["id"] in alive]
+        # le spunte dei promemoria nati nella dashboard (id "d...") restano finché l'iPhone ne manda uno con quel titolo
+        t["done"] = [d for d in t["done"] if d["id"] in alive or (d["id"].startswith("d") and d["title"].strip().lower() in titles)]
         t["items"] = [i for i in t["items"] if not (i.get("exported") and i["title"].strip().lower() in titles)]
         save_todos(t)
 
@@ -474,7 +475,11 @@ def api_todo_done(rid):
     with _tlock:
         t = load_todos()
         if rid.startswith("d"):
+            item = next((i for i in t["items"] if i["id"] == rid), None)
             t["items"] = [i for i in t["items"] if i["id"] != rid]
+            # se era già stato consegnato all'iPhone, in Apple esiste: va chiuso anche lì
+            if item and item.get("exported"):
+                t["done"].append({"id": rid, "title": item["title"], "list": ""})
         else:
             # tiene solo le spunte di promemoria che l'iPhone manda ancora: la lista non cresce all'infinito
             # salva anche titolo ed elenco: l'iPhone li cerca per nome, l'id non sa calcolarlo
