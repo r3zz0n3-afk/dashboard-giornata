@@ -199,6 +199,9 @@ La dashboard può mandarti notifiche anche a pagina chiusa:
 - **promemoria**: all'ora del promemoria, se ha un orario;
 - **esame vicino**: alle 8, quando mancano 7, 3 o 1 giorno;
 - **riepilogo del mattino**: alle 7:30, con eventi, meteo e cose da fare.
+- **anteprima di domani**: alle 21, con la prima lezione, l'ora della sveglia e se serve l'ombrello.
+  La sveglia è 90 minuti prima del primo impegno (cambia con `WAKE_BEFORE=60` nel `.env`);
+  l'ombrello si consiglia se tra le 7 e le 20 la pioggia è probabile almeno al 50%.
 
 Su iPhone le notifiche web funzionano solo se la pagina è in **https** e la dashboard è **aggiunta alla schermata Home**.
 Tailscale dà un certificato https vero al server; sul server, una volta sola:

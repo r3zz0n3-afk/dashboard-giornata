@@ -51,6 +51,8 @@ VAPID_FILE = DATA / "vapid.pem"  # chiave privata con cui il server firma le not
 PUSH_CONTACT = os.getenv("PUSH_CONTACT", "mailto:dashboard-giornata@users.noreply.github.com")
 NOTIFY_BEFORE = int(os.getenv("NOTIFY_BEFORE", "15"))  # minuti di anticipo per gli eventi
 MORNING_AT = dtime(7, 30)  # riepilogo del mattino
+EVENING_AT = dtime(21)  # anteprima di domani
+WAKE_BEFORE = int(os.getenv("WAKE_BEFORE", "90"))  # minuti tra la sveglia e il primo impegno (prepararsi + strada)
 EXAM_AT = dtime(8)  # avviso esami
 EXAM_NOTICE = (7, 3, 1)  # giorni prima dell'esame in cui avvisare
 ALERT_ICLOUD_MINUTES = int(os.getenv("ALERT_ICLOUD_MINUTES", "120"))  # avvisa se iCloud non risponde da tanto
@@ -244,9 +246,14 @@ def fetch_weather():
     rain = next(({"from": t[11:16], "prob": p}
                  for t, p in zip(f["hourly"]["time"], f["hourly"]["precipitation_probability"])
                  if t.startswith(today) and t >= now_h and (p or 0) >= 50), None)
+    # per l'anteprima della sera: prima ora di domani, tra le 7 e le 20, con pioggia probabile
+    tomorrow = (datetime.now(TZ).date() + timedelta(days=1)).isoformat()
+    rain_tomorrow = next(({"from": t[11:16], "prob": p}
+                          for t, p in zip(f["hourly"]["time"], f["hourly"]["precipitation_probability"])
+                          if t.startswith(tomorrow) and "07:00" <= t[11:16] <= "20:00" and (p or 0) >= 50), None)
     return {"place": place["name"],
             "now": {"temp": round(f["current"]["temperature_2m"]), "text": WMO.get(f["current"]["weather_code"], "—")},
-            "days": days, "rain": rain}
+            "days": days, "rain": rain, "rain_tomorrow": rain_tomorrow}
 
 
 def get_weather():
@@ -256,6 +263,7 @@ def get_weather():
         today = datetime.now(TZ).date()
         sky = [("Rovesci", 70), ("Sereno", 0), ("Poco nuvoloso", 10), ("Pioggia", 80), ("Nuvoloso", 30), ("Sereno", 0), ("Sereno", 5)]
         return {"place": WEATHER_CITY, "now": {"temp": 14, "text": "Poco nuvoloso"}, "rain": {"from": "16:00", "prob": 70},
+                "rain_tomorrow": None,
                 "days": [{"date": (today + timedelta(days=i)).isoformat(), "text": t, "max": 17 - i % 3, "min": 8 + i % 2, "rain": r}
                          for i, (t, r) in enumerate(sky[:DAYS])]}
     with _wlock:
@@ -530,7 +538,34 @@ def due_notifications(now):
         if todo:
             parts.append(f"{todo} cos{'a' if todo == 1 else 'e'} da fare")
         out.append((f"morning|{today}", f"Buongiorno, {GIORNI[today.weekday()]} {today.day}", " · ".join(parts), None))
+
+    # anteprima di domani, la sera: prima lezione, sveglia e ombrello (stesse fonti del riepilogo del mattino)
+    if EVENING_AT <= now.time():
+        out.append((f"evening|{today}", *evening_preview(today + timedelta(days=1), events), None))
     return out
+
+
+def evening_preview(day, events):
+    """Titolo e testo dell'anteprima di `day`. `events` sono quelli già letti: coprono i prossimi 7 giorni."""
+    timed = sorted((e for e in events if not e["all_day"] and datetime.fromisoformat(e["start"]).date() == day),
+                   key=lambda e: e["start"])
+    parts = []
+    if timed:
+        first = timed[0]
+        start = datetime.fromisoformat(first["start"])
+        # i calendari delle lezioni si chiamano "Lezione ...": per gli altri impegni dice "Primo impegno"
+        kind = "Prima lezione" if "lezion" in f"{first['calendar']} {first['title']}".lower() else "Primo impegno"
+        parts.append(" · ".join(x for x in [f"{kind} alle {start:%H:%M}: {first['title'].strip()}", first["location"]] if x))
+        wake = start - timedelta(minutes=WAKE_BEFORE)
+        wake -= timedelta(minutes=wake.minute % 5)  # arrotonda ai 5 minuti prima
+        parts.append(f"Sveglia alle {wake:%H:%M}")
+    else:
+        parts.append("Nessun impegno: puoi dormire")
+    w = get_weather()
+    if w and not w.get("error"):
+        rain = w.get("rain_tomorrow")
+        parts.append(f"Porta l'ombrello: pioggia dalle {rain['from']} ({rain['prob']}%)" if rain else "Niente ombrello")
+    return f"Domani, {GIORNI[day.weekday()]} {day.day}", "\n".join(parts)
 
 
 # ---------------------------------------------------------------- salute: avvisa se qualcosa smette di funzionare
