@@ -171,7 +171,8 @@ il filtro *Completato è disattivato* trova solo quelli ancora aperti.
 ### Rendilo automatico
 Nell'app Comandi Rapidi vai su **Automazione**, poi tocca **+**. Due idee, anche insieme:
 - **App → Promemoria → "Viene chiusa"**: ogni volta che esci da Promemoria, la dashboard si aggiorna.
-- **Ora del giorno**: ad esempio alle 7:30, alle 13:00 e alle 19:00 (crea un'automazione per ogni orario).
+- **Ora del giorno**: ad esempio ogni giorno alle 7:00, così la lista arriva almeno una volta al giorno
+  anche se non apri Promemoria (crea un'automazione per ogni orario).
 
 Per ognuna scegli **Esegui immediatamente** e l'azione "Esegui comando → Invia promemoria".
 
@@ -218,11 +219,12 @@ pulsanti, quindi toccandola si apre la dashboard con un foglio che li contiene.
 ### Avvisi se qualcosa smette di funzionare
 La dashboard ti avvisa (con una notifica e un riquadro in alto nella pagina) quando i dati smettono di essere aggiornati:
 - **iCloud non risponde** da 2 ore: se Apple rifiuta l'accesso, probabilmente la password per app è scaduta;
-- **Promemoria non sincronizzati** da 24 ore: il Comando Rapido o la sua automazione si sono fermati;
+- **Promemoria non sincronizzati** da 30 ore: il Comando Rapido o la sua automazione si sono fermati
+  (con l'automazione quotidiana delle 7 vuol dire che un invio è saltato);
 - **Spotify scollegato**: l'accesso è stato tolto, va ricollegato dalla Home.
 
 L'avviso parte una volta e si ripete una volta al giorno finché il problema resta; quando si risolve arriva
-"di nuovo a posto". Le soglie si cambiano nel `.env`: `ALERT_ICLOUD_MINUTES=120`, `ALERT_REMINDERS_HOURS=24`.
+"di nuovo a posto". Le soglie si cambiano nel `.env`: `ALERT_ICLOUD_MINUTES=120`, `ALERT_REMINDERS_HOURS=30`.
 
 ### Apertura immediata, anche senza rete
 Il service worker (`static/sw.js`) tiene una copia della pagina e degli ultimi dati: la dashboard si apre subito,
