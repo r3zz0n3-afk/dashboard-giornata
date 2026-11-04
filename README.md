@@ -315,6 +315,7 @@ npm run build      # prima del commit: genera la versione finale, compressa
 | `data/todos.json` | Promemoria aggiunti dalla dashboard e spunte |
 | `data/push.json` | Dispositivi iscritti alle notifiche e notifiche già mandate |
 | `data/spotify.json` | Accesso al tuo account Spotify (si crea quando lo colleghi) |
+| `data/spotify-lost` | C'è solo se Spotify ha revocato l'accesso: fa partire l'avviso «Spotify scollegato» |
 | `data/vapid.pem` | Chiave privata per firmare le notifiche (si crea da sola) |
 | `static/sw.js` | Service worker: notifiche a pagina chiusa e copia della dashboard per aprirla senza rete |
 | `install.sh` | Installazione e servizio sempre attivo |

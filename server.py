@@ -61,6 +61,7 @@ SPOTIFY_ID = os.getenv("SPOTIFY_CLIENT_ID", "").strip()
 SPOTIFY_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET", "").strip()
 SPOTIFY_REDIRECT = os.getenv("SPOTIFY_REDIRECT", "").strip()  # es. https://homelab.xxx.ts.net:8443/api/spotify/callback
 SPOTIFY_FILE = DATA / "spotify.json"  # il "refresh token" di Spotify: segreto, si crea quando colleghi l'account
+SPOTIFY_LOST = DATA / "spotify-lost"  # c'è solo se il collegamento c'era e Spotify l'ha revocato: dentro, l'ora
 
 # colori dei tag di Notion: la pagina li traduce in classi CSS (c-blue, c-orange, ...)
 PALETTE = ["blue", "orange", "green", "pink", "yellow", "brown", "red", "gray"]
@@ -604,8 +605,9 @@ def health_issues(now):
         if age >= ALERT_REMINDERS_HOURS * 3600:
             out["rem"] = (f"rem|{up}|{int(age // 86400)}", "Promemoria non sincronizzati",
                           f"L'iPhone non manda i promemoria {_since(age)}: controlla il Comando Rapido «Invio Promemoria» e la sua automazione.")
-    if SPOTIFY_ID and SPOTIFY_SECRET and SPOTIFY_REDIRECT and not SPOTIFY_FILE.exists():
-        out["spotify"] = ("spotify", "Spotify scollegato", "Il player non ha più accesso a Spotify: ricollegalo dalla Home.")
+    if SPOTIFY_LOST.exists():  # non basta che manchi spotify.json: prima del primo collegamento manca anche lui
+        out["spotify"] = (f"spotify|{SPOTIFY_LOST.read_text().strip()}", "Spotify scollegato",
+                          "Il player non ha più accesso a Spotify: ricollegalo dalla Home.")
     return out
 
 
@@ -632,11 +634,11 @@ def notifier():
     """Gira in sottofondo: ogni 30 secondi guarda se c'è qualcosa da notificare."""
     while True:
         time.sleep(30)
+        now = datetime.now(TZ)
+        with _plock:
+            if not load_push()["subs"]:
+                continue  # nessuno iscritto: non serve neanche chiedere il calendario
         try:
-            with _plock:
-                if not load_push()["subs"]:
-                    continue  # nessuno iscritto: non serve neanche chiedere il calendario
-            now = datetime.now(TZ)
             for key, title, body, data in due_notifications(now):  # chiede anche il calendario: aggiorna fail_since
                 with _plock:
                     p = load_push()
@@ -649,10 +651,14 @@ def notifier():
                     p["snooze"] = {k: z for k, z in p.get("snooze", {}).items() if z["at"] >= old}
                     save_push(p)
                 push_send(title, body, data=data)
-            for title, body in health_notifications(now):
-                push_send(title, body)
         except Exception as exc:  # un errore (es. iCloud irraggiungibile) non deve fermare le notifiche per sempre
             print(f"Notifiche: {exc}", flush=True)
+        # gli avvisi hanno un try tutto loro: se le notifiche normali si rompono a ogni giro, è proprio quando servono
+        try:
+            for title, body in health_notifications(now):
+                push_send(title, body)
+        except Exception as exc:
+            print(f"Avvisi: {exc}", flush=True)
 
 
 # ---------------------------------------------------------------- spotify
@@ -693,6 +699,7 @@ def _spotify_token(force=False):
             except HTTPError as exc:
                 if exc.code == 400:  # accesso revocato da Spotify o dall'account: va ricollegato
                     SPOTIFY_FILE.unlink(missing_ok=True)
+                    SPOTIFY_LOST.write_text(datetime.now(TZ).isoformat())  # per l'avviso "Spotify scollegato"
                     return None
                 raise
             t.update(access_token=new["access_token"], expires_at=time.time() + new["expires_in"],
@@ -960,6 +967,7 @@ def api_spotify_callback():
     with _slock:
         _spotify_save({"access_token": t["access_token"], "refresh_token": t["refresh_token"],
                        "expires_at": time.time() + t["expires_in"]})
+        SPOTIFY_LOST.unlink(missing_ok=True)  # di nuovo collegato: parte l'avviso "Spotify collegato"
     _spot["at"] = 0.0
     return redirect("/")
 
