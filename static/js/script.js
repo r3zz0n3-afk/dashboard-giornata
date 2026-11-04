@@ -45,6 +45,8 @@ function split(day) {
 const dayName = (n, d) => n === 0 ? "Oggi" : n === 1 ? "Domani" : cap(d.toLocaleDateString("it-IT", { weekday: "long" }));
 const forecast = d => data?.weather?.days?.find(x => x.date === isoDay(d));
 const tag = (ev, past) => `<span class="${PILL} ${color(ev.color)} ${past ? "opacity-60" : ""}">${esc(ev.calendar)}</span>`;
+// qualcosa ha smesso di funzionare (iCloud, Comando Rapido): titolo in grassetto, poi cosa fare
+const warning = w => `<div role="status" class="mt-5 rounded-[14px] bg-danger-bg px-4 py-3.5 text-sm text-danger md:px-5"><strong class="font-semibold">${esc(w.title)}</strong> · ${esc(w.body)}</div>`;
 const notice = text => `<div class="mt-5 rounded-[14px] bg-danger-bg px-4 py-3.5 text-sm text-danger md:px-5">${esc(text)}</div>`;
 
 function eventRow(ev, now) {
@@ -297,7 +299,7 @@ function render() {
   if (view === "cal") renderWeek(now);
   if (!data) return;
 
-  $("alerts").innerHTML = (data.errors || []).map(notice).join("") + (stale ? offlineNote() : "");
+  $("alerts").innerHTML = (data.warnings || []).map(warning).join("") + (data.errors || []).map(notice).join("") + (stale ? offlineNote() : "");
   if (data.demo) $("date").innerHTML += `<span class="${PILL} ${TAG.gray} ml-2.5 align-[6px]">Demo</span>`;
   renderWeather();
   const groups = renderReminders(now);

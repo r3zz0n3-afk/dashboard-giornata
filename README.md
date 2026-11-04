@@ -215,6 +215,15 @@ Le notifiche dei promemoria si possono chiudere o rimandare: **Fatto** lo spunta
 Sul computer (Chrome, Edge, Firefox) sono pulsanti dentro la notifica; su iPhone e iPad le notifiche web non hanno
 pulsanti, quindi toccandola si apre la dashboard con un foglio che li contiene.
 
+### Avvisi se qualcosa smette di funzionare
+La dashboard ti avvisa (con una notifica e un riquadro in alto nella pagina) quando i dati smettono di essere aggiornati:
+- **iCloud non risponde** da 2 ore: se Apple rifiuta l'accesso, probabilmente la password per app è scaduta;
+- **Promemoria non sincronizzati** da 24 ore: il Comando Rapido o la sua automazione si sono fermati;
+- **Spotify scollegato**: l'accesso è stato tolto, va ricollegato dalla Home.
+
+L'avviso parte una volta e si ripete una volta al giorno finché il problema resta; quando si risolve arriva
+"di nuovo a posto". Le soglie si cambiano nel `.env`: `ALERT_ICLOUD_MINUTES=120`, `ALERT_REMINDERS_HOURS=24`.
+
 ### Apertura immediata, anche senza rete
 Il service worker (`static/sw.js`) tiene una copia della pagina e degli ultimi dati: la dashboard si apre subito,
 e se homelab è spento o sei senza Tailscale mostra l'ultima versione con la scritta "Homelab non risponde: dati aggiornati alle…".

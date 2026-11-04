@@ -53,6 +53,8 @@ NOTIFY_BEFORE = int(os.getenv("NOTIFY_BEFORE", "15"))  # minuti di anticipo per 
 MORNING_AT = dtime(7, 30)  # riepilogo del mattino
 EXAM_AT = dtime(8)  # avviso esami
 EXAM_NOTICE = (7, 3, 1)  # giorni prima dell'esame in cui avvisare
+ALERT_ICLOUD_MINUTES = int(os.getenv("ALERT_ICLOUD_MINUTES", "120"))  # avvisa se iCloud non risponde da tanto
+ALERT_REMINDERS_HOURS = int(os.getenv("ALERT_REMINDERS_HOURS", "24"))  # avvisa se l'iPhone non manda i promemoria da tanto
 SPOTIFY_ID = os.getenv("SPOTIFY_CLIENT_ID", "").strip()
 SPOTIFY_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET", "").strip()
 SPOTIFY_REDIRECT = os.getenv("SPOTIFY_REDIRECT", "").strip()  # es. https://homelab.xxx.ts.net:8443/api/spotify/callback
@@ -62,7 +64,7 @@ SPOTIFY_FILE = DATA / "spotify.json"  # il "refresh token" di Spotify: segreto, 
 PALETTE = ["blue", "orange", "green", "pink", "yellow", "brown", "red", "gray"]
 
 app = Flask(__name__, static_folder=None)
-_cache = {"key": None, "at": 0.0, "events": [], "error": None}
+_cache = {"key": None, "at": 0.0, "events": [], "error": None, "fail_since": None}  # fail_since: da quando iCloud non risponde
 _lock = threading.Lock()
 
 
@@ -162,8 +164,10 @@ def get_events(day: date):
             return _cache["events"], _cache["error"]
         try:
             events, err = fetch_caldav(day), None
+            _cache["fail_since"] = None
         except Exception as exc:  # mostra l'errore nella pagina, tiene gli ultimi dati validi
             events, err = _cache["events"], f"Errore calendario iCloud: {exc}"
+            _cache["fail_since"] = _cache["fail_since"] or time.time()
         _cache.update(key=day.isoformat(), at=time.time(), events=events, error=err)
         return events, err
 
@@ -529,6 +533,66 @@ def due_notifications(now):
     return out
 
 
+# ---------------------------------------------------------------- salute: avvisa se qualcosa smette di funzionare
+# Senza questi avvisi, una password scaduta o un Comando Rapido fermo si scoprono solo guardando dati vecchi.
+RECOVERED = {"icloud": ("iCloud risponde di nuovo", "Il calendario è di nuovo aggiornato."),
+             "rem": ("Promemoria di nuovo sincronizzati", "L'iPhone ha mandato la lista aggiornata."),
+             "spotify": ("Spotify collegato", "Il player nella Home funziona di nuovo.")}
+
+
+def _since(seconds):
+    """Da quanto tempo, in parole: "da 2 ore", "da ieri", "da 3 giorni"."""
+    seconds += 30  # arrotonda al minuto: 2 h 59 min 59 s sono "3 ore"
+    h = int(seconds // 3600)
+    if h < 1:
+        return f"da {int(seconds // 60)} minuti"
+    if h < 24:
+        return f"da {h} or{'a' if h == 1 else 'e'}"
+    return "da ieri" if h < 48 else f"da {h // 24} giorni"
+
+
+def health_issues(now):
+    """I problemi che rendono vecchi i dati: {tipo: (chiave, titolo, testo)}.
+    La chiave cambia quando il problema ricomincia o dura un giorno in più:
+    così l'avviso parte una volta, e poi una volta al giorno finché non si risolve, non ogni 30 secondi."""
+    out, t = {}, now.timestamp()
+    since = _cache["fail_since"]
+    if since and t - since >= ALERT_ICLOUD_MINUTES * 60:
+        err = _cache["error"] or ""
+        hint = (" Forse la password per app è scaduta o è stata revocata: creane una nuova su account.apple.com e mettila nel file .env."
+                if re.search(r"401|403|unauthori[sz]ed|forbidden", err, re.I) else "")
+        out["icloud"] = (f"icloud|{int(since)}|{int((t - since) // 86400)}", "iCloud non risponde",
+                         f"Il calendario non si aggiorna {_since(t - since)}.{hint}")
+    if TOKEN and not DEMO:  # il Comando Rapido è in uso: ci si aspetta che mandi la lista ogni tanto
+        up = load_reminders().get("updated_at")
+        age = t - datetime.fromisoformat(up).timestamp() if up else 0
+        if age >= ALERT_REMINDERS_HOURS * 3600:
+            out["rem"] = (f"rem|{up}|{int(age // 86400)}", "Promemoria non sincronizzati",
+                          f"L'iPhone non manda i promemoria {_since(age)}: controlla il Comando Rapido «Invio Promemoria» e la sua automazione.")
+    if SPOTIFY_ID and SPOTIFY_SECRET and SPOTIFY_REDIRECT and not SPOTIFY_FILE.exists():
+        out["spotify"] = ("spotify", "Spotify scollegato", "Il player non ha più accesso a Spotify: ricollegalo dalla Home.")
+    return out
+
+
+def health_notifications(now):
+    """Confronta i problemi di adesso con quelli già segnalati (push.json → "alerts"):
+    problema nuovo (o un giorno in più) → avviso; problema sparito → "di nuovo a posto"."""
+    issues, send = health_issues(now), []
+    with _plock:
+        p = load_push()
+        alerts = p.setdefault("alerts", {})
+        for kind, (key, title, body) in issues.items():
+            if alerts.get(kind) != key:
+                alerts[kind] = key
+                send.append((title, body))
+        for kind in [k for k in alerts if k not in issues]:
+            del alerts[kind]
+            send.append(RECOVERED[kind])
+        if send:
+            save_push(p)
+    return send
+
+
 def notifier():
     """Gira in sottofondo: ogni 30 secondi guarda se c'è qualcosa da notificare."""
     while True:
@@ -538,7 +602,7 @@ def notifier():
                 if not load_push()["subs"]:
                     continue  # nessuno iscritto: non serve neanche chiedere il calendario
             now = datetime.now(TZ)
-            for key, title, body, data in due_notifications(now):
+            for key, title, body, data in due_notifications(now):  # chiede anche il calendario: aggiorna fail_since
                 with _plock:
                     p = load_push()
                     if key in p["sent"]:
@@ -550,6 +614,8 @@ def notifier():
                     p["snooze"] = {k: z for k, z in p.get("snooze", {}).items() if z["at"] >= old}
                     save_push(p)
                 push_send(title, body, data=data)
+            for title, body in health_notifications(now):
+                push_send(title, body)
         except Exception as exc:  # un errore (es. iCloud irraggiungibile) non deve fermare le notifiche per sempre
             print(f"Notifiche: {exc}", flush=True)
 
@@ -688,6 +754,9 @@ def api_dashboard():
     events, err = get_events(today)
     exams, exam_err = get_exams(today)
     rem = load_reminders()
+    issues = health_issues(datetime.now(TZ))
+    if "icloud" in issues:
+        err = None  # l'avviso qui sotto dice già che iCloud non risponde, e da quanto
     return jsonify({
         "now": datetime.now(TZ).isoformat(),
         "today": today.isoformat(),
@@ -697,6 +766,8 @@ def api_dashboard():
         "weather": get_weather(),
         "exams": exams,
         "errors": [e for e in [err, exam_err] if e],
+        # gli stessi avvisi delle notifiche; Spotify no: lo dice già il player
+        "warnings": [{"title": t, "body": b} for k, (_, t, b) in issues.items() if k != "spotify"],
         "demo": DEMO,
     })
 
