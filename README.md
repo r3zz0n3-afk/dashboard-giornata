@@ -211,6 +211,15 @@ sempre e solo per i tuoi dispositivi: `serve` non la pubblica su internet (quell
 Sull'iPhone apri quell'indirizzo in Safari, **Condividi → Aggiungi alla schermata Home**, apri la dashboard dall'icona
 e tocca **Attiva notifiche** in fondo alla pagina. Arriva subito una notifica di prova.
 
+Le notifiche dei promemoria si possono chiudere o rimandare: **Fatto** lo spunta, **Tra 10 minuti** te lo ricorda di nuovo.
+Sul computer (Chrome, Edge, Firefox) sono pulsanti dentro la notifica; su iPhone e iPad le notifiche web non hanno
+pulsanti, quindi toccandola si apre la dashboard con un foglio che li contiene.
+
+### Apertura immediata, anche senza rete
+Il service worker (`static/sw.js`) tiene una copia della pagina e degli ultimi dati: la dashboard si apre subito,
+e se homelab è spento o sei senza Tailscale mostra l'ultima versione con la scritta "Homelab non risponde: dati aggiornati alle…".
+I file della pagina si aggiornano da soli: la copia nuova arriva in sottofondo e si vede all'apertura successiva.
+
 Il server firma le notifiche con una chiave che crea da solo in `data/vapid.pem`: se la cancelli, i telefoni vanno iscritti di nuovo.
 
 ### Spotify
@@ -293,6 +302,6 @@ npm run build      # prima del commit: genera la versione finale, compressa
 | `data/push.json` | Dispositivi iscritti alle notifiche e notifiche già mandate |
 | `data/spotify.json` | Accesso al tuo account Spotify (si crea quando lo colleghi) |
 | `data/vapid.pem` | Chiave privata per firmare le notifiche (si crea da sola) |
-| `static/sw.js` | Service worker: mostra le notifiche anche a pagina chiusa |
+| `static/sw.js` | Service worker: notifiche a pagina chiusa e copia della dashboard per aprirla senza rete |
 | `install.sh` | Installazione e servizio sempre attivo |
 | `deploy.sh` | Aggiorna il server da GitHub con un comando |

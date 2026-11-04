@@ -395,7 +395,8 @@ def _check_token():
 # Web Push: il telefono, quando ti iscrivi, dà alla pagina un "endpoint" (un indirizzo di Apple o Google) e due chiavi.
 # Il server cifra il messaggio con quelle chiavi, lo firma con la sua chiave VAPID e lo manda all'endpoint;
 # Apple lo consegna al telefono, dove il service worker (static/sw.js) mostra la notifica anche a pagina chiusa.
-# data/push.json: {"subs": [iscrizioni], "sent": {chiave: giorno}}; "sent" ricorda cosa è già partito, anche dopo un riavvio.
+# data/push.json: {"subs": [iscrizioni], "sent": {chiave: giorno}, "snooze": {id promemoria: {"at", "title"}}};
+# "sent" ricorda cosa è già partito, anche dopo un riavvio; "snooze" sono i promemoria rimandati dalla notifica.
 _plock = threading.Lock()
 # l'endpoint arriva dalla pagina: il server ci manda richieste, quindi accetta solo i servizi push veri
 PUSH_HOSTS = ("push.apple.com", "fcm.googleapis.com", "push.services.mozilla.com", "notify.windows.com")
@@ -406,7 +407,7 @@ def load_push():
     try:
         return json.loads(PUSH_FILE.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return {"subs": [], "sent": {}}
+        return {"subs": [], "sent": {}, "snooze": {}}
 
 
 def save_push(p):
@@ -433,11 +434,12 @@ def _push_host_ok(endpoint):
     return bool(m) and any(m[1] == h or m[1].endswith("." + h) for h in PUSH_HOSTS)
 
 
-def push_send(title, body, only=None):
-    """Manda una notifica a tutti gli iscritti (o solo all'endpoint `only`). Ritorna a quanti è arrivata."""
+def push_send(title, body, only=None, data=None):
+    """Manda una notifica a tutti gli iscritti (o solo all'endpoint `only`). Ritorna a quanti è arrivata.
+    `data` arriva al service worker: per i promemoria è {"rid": id}, che serve ai pulsanti "Fatto" e "Tra 10 minuti"."""
     with _plock:
         subs = [s for s in load_push()["subs"] if only is None or s["endpoint"] == only]
-    msg = json.dumps({"title": title, "body": body}, ensure_ascii=False)
+    msg = json.dumps({"title": title, "body": body, "data": data or {}}, ensure_ascii=False)
     sent, gone = 0, []
     for s in subs:
         try:
@@ -463,7 +465,7 @@ def _exam_name(title):
 
 
 def due_notifications(now):
-    """Le notifiche da mandare adesso, come (chiave, titolo, testo). La chiave è unica: ogni notifica parte una volta."""
+    """Le notifiche da mandare adesso, come (chiave, titolo, testo, dati). La chiave è unica: ogni notifica parte una volta."""
     today = now.date()
     out = []
     events, _ = get_events(today)
@@ -477,7 +479,7 @@ def due_notifications(now):
         if 0 <= mins <= NOTIFY_BEFORE:
             when = "Adesso" if mins == 0 else f"Tra {mins} minut{'o' if mins == 1 else 'i'}"
             body = " · ".join(x for x in [when, f"{start:%H:%M}–{end:%H:%M}", e["location"]] if x)
-            out.append((f"ev|{e['start']}|{e['title']}", e["title"], body))
+            out.append((f"ev|{e['start']}|{e['title']}", e["title"], body, None))
 
     # promemoria con orario: quando arriva l'ora (fino a 10 minuti dopo, se il server era fermo)
     rems = all_reminders(load_reminders().get("items", []))
@@ -485,7 +487,16 @@ def due_notifications(now):
         if r.get("due") and not r.get("date_only"):
             d = datetime.fromisoformat(r["due"])
             if now - timedelta(minutes=10) < d <= now:
-                out.append((f"rem|{r['id']}|{r['due']}", "Promemoria", r["title"]))
+                out.append((f"rem|{r['id']}|{r['due']}", "Promemoria", r["title"], {"rid": r["id"]}))
+
+    # promemoria rimandati dalla notifica ("Tra 10 minuti"), se non sono stati spuntati nel frattempo
+    with _plock:
+        snooze = load_push().get("snooze", {})
+    ids = {r["id"] for r in rems}
+    for rid, z in snooze.items():
+        at = datetime.fromisoformat(z["at"])
+        if rid in ids and now - timedelta(minutes=10) < at <= now:
+            out.append((f"snz|{rid}|{z['at']}", "Promemoria", z["title"], {"rid": rid}))
 
     # esame vicino: la mattina, se manca uno dei giorni di EXAM_NOTICE
     if EXAM_AT <= now.time() and now.hour < 12:
@@ -496,7 +507,7 @@ def due_notifications(now):
             if days in EXAM_NOTICE:
                 title = "Esame domani" if days == 1 else f"Esame tra {days} giorni"
                 body = f"{_exam_name(x['title'])} · {GIORNI[start.weekday()]} {start.day}" + ("" if x["all_day"] else f" alle {start:%H:%M}")
-                out.append((f"exam|{today}|{x['start']}|{x['title']}", title, body))
+                out.append((f"exam|{today}|{x['start']}|{x['title']}", title, body, None))
 
     # riepilogo del mattino: eventi, meteo e cose da fare oggi
     if MORNING_AT <= now.time() and now.hour < 11:
@@ -514,7 +525,7 @@ def due_notifications(now):
         todo = sum(1 for r in rems if not r.get("due") or datetime.fromisoformat(r["due"]).date() <= today)
         if todo:
             parts.append(f"{todo} cos{'a' if todo == 1 else 'e'} da fare")
-        out.append((f"morning|{today}", f"Buongiorno, {GIORNI[today.weekday()]} {today.day}", " · ".join(parts)))
+        out.append((f"morning|{today}", f"Buongiorno, {GIORNI[today.weekday()]} {today.day}", " · ".join(parts), None))
     return out
 
 
@@ -527,7 +538,7 @@ def notifier():
                 if not load_push()["subs"]:
                     continue  # nessuno iscritto: non serve neanche chiedere il calendario
             now = datetime.now(TZ)
-            for key, title, body in due_notifications(now):
+            for key, title, body, data in due_notifications(now):
                 with _plock:
                     p = load_push()
                     if key in p["sent"]:
@@ -536,8 +547,9 @@ def notifier():
                     p["sent"][key] = now.date().isoformat()
                     old = (now.date() - timedelta(days=2)).isoformat()
                     p["sent"] = {k: v for k, v in p["sent"].items() if v >= old}  # dimentica quelle di giorni fa
+                    p["snooze"] = {k: z for k, z in p.get("snooze", {}).items() if z["at"] >= old}
                     save_push(p)
-                push_send(title, body)
+                push_send(title, body, data=data)
         except Exception as exc:  # un errore (es. iCloud irraggiungibile) non deve fermare le notifiche per sempre
             print(f"Notifiche: {exc}", flush=True)
 
@@ -854,6 +866,23 @@ def api_spotify_cmd(cmd):
         msg = ((p or {}).get("error") or {}).get("message", "") if isinstance(p, dict) else ""
         return jsonify({"ok": False, "error": f"Spotify ha risposto {status} {msg}".strip()}), 502
     return jsonify({"ok": True})
+
+
+@app.post("/api/todos/<rid>/snooze")
+def api_todo_snooze(rid):
+    """Rimanda la notifica di un promemoria: {"minutes": 10} (10 se manca). Il promemoria non cambia, cambia solo l'avviso."""
+    minutes = (request.get_json(silent=True) or {}).get("minutes", 10)
+    if not isinstance(minutes, int) or not 1 <= minutes <= 240:
+        abort(400, "minuti non validi")
+    r = next((r for r in all_reminders(load_reminders().get("items", [])) if r["id"] == rid), None)
+    if r is None:
+        abort(404)
+    at = datetime.now(TZ) + timedelta(minutes=minutes)
+    with _plock:
+        p = load_push()
+        p.setdefault("snooze", {})[rid] = {"at": at.isoformat(), "title": r["title"]}
+        save_push(p)
+    return jsonify({"ok": True, "at": at.isoformat()})
 
 
 @app.post("/api/refresh")

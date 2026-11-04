@@ -17,6 +17,8 @@ const color = c => TAG[c] || TAG.gray;
 const PILL = "inline-block max-w-full truncate rounded-[5px] px-1.5 text-xs/[22px] font-medium tracking-normal";
 const DAYS = 7;  // oggi e i 6 giorni successivi, come nel server
 let data = null;
+let stale = false;   // true = i dati sono la copia salvata, perché homelab non risponde
+let sheetFor = null; // il promemoria da mostrare nel foglio aperto da una notifica (#/promemoria/<id>)
 let sel = 0;     // giorno mostrato nel Calendario: 0 = oggi, 1 = domani, ...
 let view = "home";  // schermata: "home" (#/) o "cal" (#/calendario)
 let open = null;    // l'evento o l'esame toccato, per mostrarne i dettagli: la sua chiave (inizio + titolo)
@@ -295,7 +297,7 @@ function render() {
   if (view === "cal") renderWeek(now);
   if (!data) return;
 
-  $("alerts").innerHTML = (data.errors || []).map(notice).join("");
+  $("alerts").innerHTML = (data.errors || []).map(notice).join("") + (stale ? offlineNote() : "");
   if (data.demo) $("date").innerHTML += `<span class="${PILL} ${TAG.gray} ml-2.5 align-[6px]">Demo</span>`;
   renderWeather();
   const groups = renderReminders(now);
@@ -317,6 +319,7 @@ function render() {
     renderWeekList(now);
   }
   $("summary").textContent = summary(day, isToday, d.timed, groups, now, exams);
+  if (sheetFor && !stale) openSheet();  // aspetta i dati veri: nella copia salvata il promemoria potrebbe essere vecchio
 
   const ru = data.reminders_updated_at ? new Date(data.reminders_updated_at) : null;
   $("updated").textContent = `Calendario aggiornato alle ${hm(new Date(data.now))}` +
@@ -326,6 +329,8 @@ function render() {
 // Le due schermate stanno nella stessa pagina: l'indirizzo dopo # dice quale mostrare.
 // Così funzionano il tasto indietro e i preferiti, senza bisogno di un framework.
 function route() {
+  const m = location.hash.match(/^#\/promemoria\/(.+)$/);  // aperto da una notifica: la Home con il foglio del promemoria
+  if (m) sheetFor = decodeURIComponent(m[1]);
   view = location.hash === "#/calendario" ? "cal" : "home";
   $("viewHome").hidden = view !== "home";
   $("viewCal").hidden = view !== "cal";
@@ -349,25 +354,52 @@ function select(i) {
       { duration: 220, easing: "ease-out" });
 }
 
+// Apertura immediata: al primo caricamento la pagina mostra subito l'ultima copia dei dati salvata dal service worker
+// (sw.js), poi chiede quelli nuovi al server. Se il server non risponde, resta la copia con la scritta "offline".
 async function load(force) {
   const btn = $("refresh");
   if (force) { btn.classList.add("busy"); btn.disabled = true; btn.textContent = "Aggiorno"; }
+  if (!data && "caches" in window) {
+    const saved = await caches.match("api/dashboard").catch(() => null);
+    if (saved) {
+      data = await saved.json();
+      stale = true;  // finché non arriva la risposta del server
+      render();
+      hideSplash(0);  // c'è già qualcosa da mostrare: niente attesa
+    }
+  }
   try {
     if (force) await fetch("api/refresh", { method: "POST" });
-    const r = await fetch("api/dashboard", { cache: "no-store" });
+    // dopo 8 secondi lascia perdere: se homelab è spento la richiesta potrebbe restare appesa a lungo
+    const r = await fetch("api/dashboard", { cache: "no-store", signal: AbortSignal.timeout(8000) });
+    if (!r.ok) throw new Error(r.status);
     data = await r.json();
+    stale = false;
   } catch (e) {
-    $("alerts").innerHTML = notice(`Server non raggiungibile: ${e.message}`);
+    if (data) stale = true;
+    else $("alerts").innerHTML = notice(`Server non raggiungibile: ${e.message}`);
   }
   render();
-  // Primo caricamento finito: la schermata d'apertura svanisce e il contenuto compare con una dissolvenza.
-  // Resta almeno SPLASH_MIN ms, così non fa solo un lampo quando i dati arrivano subito.
-  if (document.body.classList.contains("loading")) {
-    await new Promise(r => setTimeout(r, Math.max(0, SPLASH_MIN - (Date.now() - started))));
-    document.body.classList.remove("loading");
-    document.querySelector("main").removeAttribute("aria-busy");
-  }
+  hideSplash(SPLASH_MIN);
   if (force) { btn.classList.remove("busy"); btn.disabled = false; btn.textContent = "Aggiorna"; }
+}
+
+// Primo caricamento finito: la schermata d'apertura svanisce e il contenuto compare con una dissolvenza.
+// Resta almeno `min` ms, così non fa solo un lampo quando i dati arrivano subito.
+async function hideSplash(min) {
+  if (!document.body.classList.contains("loading")) return;
+  await new Promise(r => setTimeout(r, Math.max(0, min - (Date.now() - started))));
+  document.body.classList.remove("loading");
+  document.querySelector("main").removeAttribute("aria-busy");
+}
+
+// La scritta quando i dati sono la copia salvata: grigia, non rossa, perché non è un errore ma un'informazione.
+function offlineNote() {
+  const at = new Date(data.now), today = dayStart(new Date()).getTime() === dayStart(at).getTime();
+  const when = today ? `alle ${hm(at)}` : `il ${at.toLocaleDateString("it-IT", { day: "numeric", month: "long" })} alle ${hm(at)}`;
+  return `<div role="status" class="mt-5 flex items-center gap-2.5 rounded-[14px] bg-active px-4 py-3.5 text-sm text-muted md:px-5">
+    <span aria-hidden="true" class="size-2 shrink-0 rounded-full bg-control"></span>
+    Homelab non risponde: dati aggiornati ${when}.</div>`;
 }
 
 const started = Date.now(), SPLASH_MIN = 600;
@@ -423,6 +455,50 @@ $("reminders").onclick = e => {
   render();
 };
 
+// Il foglio di un promemoria, aperto toccando la sua notifica: su iPhone le notifiche web non hanno pulsanti,
+// quindi "Fatto" e "Tra 10 minuti" stanno qui. È un <dialog>: il browser gestisce già il focus, Esc e VoiceOver.
+let sheetRid = null;
+function openSheet() {
+  if (!sheetFor || !data) return;
+  const r = data.reminders.find(x => x.id === sheetFor);
+  sheetFor = null;
+  history.replaceState(null, "", "#/");  // ricaricando la pagina il foglio non si riapre
+  if (!r) {
+    $("alerts").insertAdjacentHTML("beforeend", notice("Questo promemoria non c'è più: forse l'hai già fatto."));
+    return;
+  }
+  sheetRid = r.id;
+  $("sheetTitle").textContent = r.title;
+  const due = r.due ? new Date(r.due) : null;
+  $("sheetDue").textContent = due ? (r.date_only ? due.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" })
+    : `${dayStart(due).getTime() === dayStart(new Date()).getTime() ? "Oggi" : cap(due.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" }))} alle ${hm(due)}`) : "Senza data";
+  if (!$("sheet").open) $("sheet").showModal();
+}
+async function sheetAction(kind) {
+  const btn = $(kind === "done" ? "sheetDone" : "sheetSnooze");
+  btn.disabled = true;
+  try {
+    const r = await fetch(`api/todos/${encodeURIComponent(sheetRid)}/${kind}`, { method: "POST" });
+    if (!r.ok) throw new Error(r.status);
+    if (kind === "done") data.reminders = data.reminders.filter(x => x.id !== sheetRid);
+    else $("alerts").insertAdjacentHTML("beforeend", `<div role="status" class="mt-5 rounded-[14px] bg-active px-4 py-3.5 text-sm text-muted md:px-5">Te lo ricordo alle ${hm(new Date((await r.json()).at))}.</div>`);
+    $("sheet").close();
+    if (kind === "done") render();
+  } catch (err) {
+    $("sheetError").textContent = `Non ci sono riuscito (${err.message}). Riprova.`;
+  }
+  btn.disabled = false;
+}
+$("sheetDone").onclick = () => sheetAction("done");
+$("sheetSnooze").onclick = () => sheetAction("snooze");
+$("sheetClose").onclick = () => $("sheet").close();
+$("sheet").onclose = () => { $("sheetError").textContent = ""; };
+$("sheet").onclick = e => { if (e.target === $("sheet")) $("sheet").close(); };  // tocco sullo sfondo scuro: chiude
+// la pagina era già aperta: il service worker ci dice quale promemoria mostrare
+navigator.serviceWorker?.addEventListener("message", e => {
+  if (e.data?.reminder) { sheetFor = e.data.reminder; openSheet(); }
+});
+
 // Aggiungere un promemoria: "+ Nuovo promemoria" apre il modulo, Annulla (o Esc) lo chiude.
 function addForm(show) {
   $("addForm").hidden = !show;
@@ -455,8 +531,9 @@ $("addForm").onsubmit = async e => {
 // del telefono con la chiave pubblica del server; l'iscrizione (endpoint + chiavi) va poi al server, che la usa per scrivere.
 // Su iPhone funziona solo in https e con la dashboard aggiunta alla schermata Home.
 const PUSH_BTN = "h-11 cursor-pointer rounded-full border border-rule px-4 text-sm font-medium text-ink transition hover:bg-active active:scale-96 disabled:opacity-50 md:h-8";
-const swReady = "serviceWorker" in navigator && "PushManager" in window
-  ? navigator.serviceWorker.register("sw.js").then(() => navigator.serviceWorker.ready) : null;
+// il service worker si registra sempre (serve anche per aprire la pagina senza rete); le notifiche solo dove esistono
+const swReg = "serviceWorker" in navigator ? navigator.serviceWorker.register("sw.js").then(() => navigator.serviceWorker.ready) : null;
+const swReady = "PushManager" in window ? swReg : null;
 const postJSON = (url, body) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
   .then(r => { if (!r.ok) throw new Error(r.status); return r; });
 // la chiave del server è in base64 "per URL": il browser la vuole come byte
