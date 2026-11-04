@@ -600,6 +600,14 @@ def _spotify_token(force=False):
         return t["access_token"]
 
 
+def _json_or_none(body):
+    """I comandi (play, pausa...) rispondono 200 ma non sempre con JSON: in quel caso conta solo il codice."""
+    try:
+        return json.loads(body) if body else None
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None
+
+
 def spotify_api(method, path, retry=True):
     """Chiama la Web API di Spotify. Ritorna (codice HTTP, risposta JSON o None)."""
     token = _spotify_token()
@@ -609,16 +617,12 @@ def spotify_api(method, path, retry=True):
                   data=b"" if method in ("PUT", "POST") else None)
     try:
         with urlopen(req, timeout=10) as r:
-            body = r.read()
-            return r.status, json.loads(body) if body else None  # 204 = risposta vuota (es. niente in riproduzione)
+            return r.status, _json_or_none(r.read())  # 204 = risposta vuota (es. niente in riproduzione)
     except HTTPError as exc:
         if exc.code == 401 and retry:  # token scaduto prima del previsto: lo rinnova e riprova una volta
             _spotify_token(force=True)
             return spotify_api(method, path, False)
-        try:
-            return exc.code, json.loads(exc.read() or b"null")
-        except json.JSONDecodeError:
-            return exc.code, None
+        return exc.code, _json_or_none(exc.read())
 
 
 def _track(item):
@@ -641,7 +645,7 @@ def get_spotify():
         return {"connected": False}
     # la pagina chiede ogni 10 secondi (e i dispositivi possono essere più d'uno): Spotify viene interrogato al massimo ogni 4
     if time.time() - _spot["at"] < 4 and _spot["data"]:
-        return _spot["data"]
+        return dict(_spot["data"], age=round((time.time() - _spot["at"]) * 1000))
     try:
         status, p = spotify_api("GET", "/me/player?additional_types=episode")
         if status == 401:
@@ -662,7 +666,7 @@ def get_spotify():
     except Exception as exc:
         out = {"connected": True, "error": f"Spotify non raggiungibile: {exc}"}
     _spot.update(at=time.time(), data=out)
-    return out
+    return dict(out, age=0)  # age: da quanti ms è stata letta la posizione; la pagina ne tiene conto per la barra
 
 
 # ---------------------------------------------------------------- rotte
@@ -858,12 +862,16 @@ def api_spotify_callback():
 def api_spotify_cmd(cmd):
     if cmd not in SPOTIFY_CMDS or get_spotify() is None:
         abort(404)
-    status, p = spotify_api(*SPOTIFY_CMDS[cmd])
+    try:
+        status, p = spotify_api(*SPOTIFY_CMDS[cmd])
+    except OSError as exc:  # Spotify irraggiungibile o troppo lento
+        return jsonify({"ok": False, "error": f"Spotify non raggiungibile: {exc}"}), 502
     _spot["at"] = 0.0  # la prossima richiesta chiede a Spotify lo stato nuovo
     if status == 404:
         return jsonify({"ok": False, "error": "Nessun dispositivo attivo: apri Spotify sul telefono o sul PC"}), 409
     if status >= 300:
-        msg = ((p or {}).get("error") or {}).get("message", "") if isinstance(p, dict) else ""
+        e = p.get("error") if isinstance(p, dict) else None
+        msg = e.get("message", "") if isinstance(e, dict) else str(e or "")
         return jsonify({"ok": False, "error": f"Spotify ha risposto {status} {msg}".strip()}), 502
     return jsonify({"ok": True})
 

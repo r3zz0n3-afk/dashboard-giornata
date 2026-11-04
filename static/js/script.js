@@ -590,6 +590,9 @@ $("push").onclick = async e => {
 // Accessibilità: pulsanti di almeno 44 px con un nome per VoiceOver, contorno verde quando ci arrivi con la tastiera,
 // il focus resta sul pulsante dopo play/pausa, l'equalizzatore si ferma se in iOS è attivo "Riduci movimento".
 let music = null, musicAt = 0, musicSig = "";
+// dopo play/pausa Spotify ci mette un attimo ad aggiornarsi: per 4 secondi vale quello che hai toccato tu,
+// così l'icona non torna indietro e poi avanti
+let musicHold = null;  // {playing, until}
 const mmss = ms => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
 const SVG = (d, size = "size-5") => `<svg viewBox="0 0 24 24" aria-hidden="true" class="${size} fill-current"><path d="${d}"/></svg>`;
 const ICON = {
@@ -610,7 +613,12 @@ const musicPos = () => Math.min(music.track.duration, music.progress + (music.pl
 async function loadMusic() {
   try {
     music = await (await fetch("api/spotify", { cache: "no-store" })).json();
-    musicAt = Date.now();
+    // il server può rispondere con una lettura di qualche secondo fa (age, in ms): la barra parte da lì, senza salti
+    musicAt = Date.now() - (music?.age || 0);
+    if (musicHold && music?.track) {
+      if (Date.now() > musicHold.until || music.playing === musicHold.playing) musicHold = null;
+      else music.playing = musicHold.playing;
+    }
   } catch { return; }  // server irraggiungibile: lo segnala già il resto della pagina
   renderMusic();
 }
@@ -618,7 +626,7 @@ async function loadMusic() {
 function renderMusic() {
   const m = music, card = $("musicCard");
   $("music").hidden = !m;
-  const sig = JSON.stringify(m && { ...m, progress: 0 });
+  const sig = JSON.stringify(m && { ...m, progress: 0, age: 0 });
   if (!m || sig === musicSig) return tickMusic();
   musicSig = sig;
   if (!m.connected || m.error || !m.track) {
@@ -647,7 +655,7 @@ function renderMusic() {
     ${m.last ? `<a href="${esc(t.url)}" target="_blank" rel="noopener" class="mt-4 ${GREEN}">Apri in Spotify</a>` : `
     <div class="mt-4">
       <div id="mBar" role="progressbar" aria-label="Avanzamento del brano" aria-valuemin="0" aria-valuemax="${Math.round(t.duration / 1000)}"
-        class="h-1 overflow-hidden rounded-full bg-white/25"><div id="mFill" class="h-full rounded-full bg-white"></div></div>
+        class="h-1 overflow-hidden rounded-full bg-white/25"><div id="mFill" class="h-full rounded-full bg-white transition-[width] duration-1000 ease-linear motion-reduce:transition-none"></div></div>
       <div aria-hidden="true" class="mt-1.5 flex justify-between text-[11px] text-spotify-muted tabular-nums"><span id="mPos"></span><span>${mmss(t.duration)}</span></div>
     </div>
     <div class="mt-1 flex items-center justify-center gap-4">
@@ -680,15 +688,19 @@ $("musicCard").onclick = async e => {
   if (cmd === "play" || cmd === "pause") {  // cambia subito l'icona, senza aspettare Spotify
     music = { ...music, progress: musicPos(), playing: cmd === "play" };
     musicAt = Date.now();
+    musicHold = { playing: music.playing, until: Date.now() + 4000 };
     renderMusic();
   }
   try {
     const r = await fetch(`api/spotify/${cmd}`, { method: "POST" });
-    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Spotify: errore ${r.status}`);
   } catch (err) {
+    musicHold = null;  // il comando non è andato: torna a mostrare lo stato vero
     $("alerts").innerHTML = notice(err.message);
   }
-  setTimeout(loadMusic, 700);  // Spotify ci mette un attimo ad aggiornare lo stato
+  // Spotify ci mette un attimo ad aggiornare lo stato (soprattutto il brano dopo "avanti"): controlla due volte
+  setTimeout(loadMusic, 600);
+  setTimeout(loadMusic, 1800);
 };
 
 $("refresh").onclick = () => { load(true); loadMusic(); };
