@@ -214,9 +214,9 @@ e tocca **Attiva notifiche** in fondo alla pagina. Arriva subito una notifica di
 Il server firma le notifiche con una chiave che crea da solo in `data/vapid.pem`: se la cancelli, i telefoni vanno iscritti di nuovo.
 
 ### Spotify
-Un mini player come la Dynamic Island dell'iPhone: una pillola nera in alto al centro con copertina, titolo e
-barrette che ballano; toccandola si allarga nel player in stile Spotify, con il dispositivo su cui suona e
-play/pausa/avanti/indietro. Quando non suona niente mostra l'ultimo brano ascoltato. I comandi funzionano solo con **Spotify Premium**,
+Un mini player nella Home, sopra i Promemoria, in stile Spotify: cosa stai ascoltando e su quale dispositivo,
+con play/pausa/avanti/indietro. Quando non suona niente mostra l'ultimo brano ascoltato.
+Funziona anche con VoiceOver e con la tastiera. I comandi funzionano solo con **Spotify Premium**,
 e Spotify chiede Premium anche al proprietario dell'app sviluppatore.
 
 1. Vai su [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard), accedi e **Create app**.

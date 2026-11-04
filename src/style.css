@@ -41,6 +41,7 @@
   /* Spotify: solo per il player, uguale nei due temi */
   --color-spotify: #1ed760;
   --color-spotify-muted: #b3b3b3;
+  --color-spotify-bg: #121212;
 
   /* etichette dei calendari: i tag di Notion, nei pastelli più accesi di Figma */
   --color-t-gray: #e9e9e6;   --color-t-gray-ink: #1a1a1a;

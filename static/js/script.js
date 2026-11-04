@@ -507,29 +507,27 @@ $("push").onclick = async e => {
   renderPush();
 };
 
-// Spotify, come la Dynamic Island dell'iPhone: una pillola nera in alto al centro (copertina, titolo, barrette che ballano);
-// toccandola si allarga nel player, in stile Spotify. La pagina chiede al server cosa suona ogni 10 secondi;
-// nel frattempo la barra avanza da sola, calcolata dal momento dell'ultima risposta.
-// Il contenuto si ridisegna solo se cambia qualcosa: il contenitore #island resta, così l'animazione non si interrompe.
-let music = null, musicAt = 0, musicSig = "", islandOpen = false;
+// Spotify: una scheda scura in stile Spotify nella Home, sopra i Promemoria. La pagina chiede al server cosa suona
+// ogni 10 secondi; nel frattempo la barra avanza da sola, calcolata dal momento dell'ultima risposta.
+// La scheda si ridisegna solo se cambia qualcosa (brano, pausa, dispositivo).
+// Accessibilità: pulsanti di almeno 44 px con un nome per VoiceOver, contorno verde quando ci arrivi con la tastiera,
+// il focus resta sul pulsante dopo play/pausa, l'equalizzatore si ferma se in iOS è attivo "Riduci movimento".
+let music = null, musicAt = 0, musicSig = "";
 const mmss = ms => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
 const SVG = (d, size = "size-5") => `<svg viewBox="0 0 24 24" aria-hidden="true" class="${size} fill-current"><path d="${d}"/></svg>`;
 const ICON = {
   play: SVG("M8 5.5v13l11-6.5z", "size-6"), pause: SVG("M7 5h3.5v14H7zM13.5 5H17v14h-3.5z", "size-6"),
   next: SVG("M6 5.5v13l9-6.5zM16.5 5H19v14h-2.5z"), previous: SVG("M18 5.5v13L9 12zM5 5h2.5v14H5z"),
-  device: SVG("M7 3h10a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm5 10.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM12 6.2a.9.9 0 1 0 0-1.8.9.9 0 0 0 0 1.8z", "size-3.5"),
 };
 // il logo di Spotify: cerchio verde con tre onde
-const LOGO = (size = "size-5") => `<svg viewBox="0 0 24 24" aria-hidden="true" class="${size} shrink-0"><circle cx="12" cy="12" r="12" class="fill-spotify"/>
+const LOGO = (size = "size-6") => `<svg viewBox="0 0 24 24" aria-hidden="true" class="${size} shrink-0"><circle cx="12" cy="12" r="12" class="fill-spotify"/>
   <path d="M6.3 9.2c3.9-1.1 8.2-.8 11.4 1.2M6.9 12.4c3.2-.9 6.8-.6 9.6 1.1M7.5 15.4c2.6-.7 5.3-.4 7.5.9" fill="none" stroke="#000" stroke-width="1.7" stroke-linecap="round"/></svg>`;
-// le barrette dell'equalizzatore: si fermano quando la musica è in pausa
-const EQ = playing => `<span aria-hidden="true" class="flex h-3.5 shrink-0 items-end gap-[2px] ${playing ? "" : "*:[animation-play-state:paused]"}">
-  <span class="h-full w-[3px] origin-bottom animate-eq rounded-full bg-spotify"></span>
-  <span class="h-full w-[3px] origin-bottom animate-eq rounded-full bg-spotify [animation-delay:-.45s]"></span>
-  <span class="h-full w-[3px] origin-bottom animate-eq rounded-full bg-spotify [animation-delay:-.2s]"></span>
-  <span class="h-full w-[3px] origin-bottom animate-eq rounded-full bg-spotify [animation-delay:-.65s]"></span></span>`;
-const SKIP = "grid size-10 cursor-pointer place-items-center rounded-full text-white/70 transition hover:text-white active:scale-90";
-const PILL_ROW = "absolute inset-x-0 top-0 flex h-10 items-center gap-2.5 pr-4 pl-2 text-left text-[13px] font-medium";
+// le barrette dell'equalizzatore accanto a "In ascolto"
+const EQ = `<span aria-hidden="true" class="flex h-3 shrink-0 items-end gap-[2px] *:h-full *:w-[3px] *:origin-bottom *:animate-eq *:rounded-full *:bg-spotify motion-reduce:*:animate-none">
+  <span></span><span class="[animation-delay:-.45s]"></span><span class="[animation-delay:-.2s]"></span></span>`;
+const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-spotify";
+const SKIP = `grid size-11 cursor-pointer place-items-center rounded-full text-spotify-muted transition hover:text-white active:scale-90 ${FOCUS}`;
+const GREEN = `inline-flex h-11 items-center rounded-full bg-spotify px-6 text-sm font-bold text-black transition hover:scale-104 active:scale-96 ${FOCUS}`;
 const musicPos = () => Math.min(music.track.duration, music.progress + (music.playing ? Date.now() - musicAt : 0));
 
 async function loadMusic() {
@@ -541,62 +539,50 @@ async function loadMusic() {
 }
 
 function renderMusic() {
-  const el = $("island"), m = music;
-  el.hidden = !m;
-  document.body.classList.toggle("island", !!m);  // fa spazio sopra il titolo, così la pillola non lo copre
-  const big = !!(m?.connected && m.track && !m.error);  // si può allargare solo se c'è un brano da mostrare
-  if (!big) islandOpen = false;
-  el.toggleAttribute("data-expanded", islandOpen);
+  const m = music, card = $("musicCard");
+  $("music").hidden = !m;
   const sig = JSON.stringify(m && { ...m, progress: 0 });
   if (!m || sig === musicSig) return tickMusic();
   musicSig = sig;
-  if (!m.connected) {
-    el.innerHTML = `<a href="api/spotify/login" class="${PILL_ROW} pl-2.5">${LOGO()}<span class="flex-1">Collega Spotify</span></a>`;
-    return;
-  }
-  if (!big) {
-    el.innerHTML = `<div class="${PILL_ROW} pl-2.5">${LOGO()}<span class="min-w-0 flex-1 truncate text-white/70">${esc(m.error ? "Spotify non raggiungibile" : "Niente in ascolto")}</span></div>`;
+  if (!m.connected || m.error || !m.track) {
+    card.innerHTML = `<div class="flex flex-wrap items-center gap-3">${LOGO()}
+      <p class="min-w-0 flex-1 text-sm text-spotify-muted">${!m.connected ? "Collega il tuo account per vedere cosa ascolti." : esc(m.error ? "Spotify non raggiungibile." : "Niente in ascolto.")}</p>
+      ${!m.connected ? `<a href="api/spotify/login" class="${GREEN}">Collega Spotify</a>` : ""}</div>`;
     return;
   }
   const t = m.track, when = m.played_at ? new Date(m.played_at) : null;
-  const ago = when ? (dayStart(when).getTime() === dayStart(new Date()).getTime() ? "oggi alle " + hm(when) : when.toLocaleDateString("it-IT", { day: "numeric", month: "short" })) : "";
-  const cover = size => t.image ? `<img src="${esc(t.image)}" alt="" class="${size} shrink-0 object-cover">` : `<span class="${size} block shrink-0 bg-white/15"></span>`;
-  el.innerHTML = `
-    <button type="button" data-island="open" aria-label="Apri il player: ${esc(t.title)}" aria-expanded="false"
-      class="${PILL_ROW} cursor-pointer transition-opacity duration-200 group-data-expanded:pointer-events-none group-data-expanded:opacity-0">
-      ${cover("size-6 rounded-[6px]")}
-      <span class="min-w-0 flex-1 truncate ${m.last ? "text-white/60" : ""}">${esc(t.title)}</span>
-      ${m.last ? LOGO("size-4") : EQ(m.playing)}
-    </button>
-    <div class="pointer-events-none absolute inset-x-0 top-0 p-[18px] opacity-0 transition-opacity duration-200
-      group-data-expanded:pointer-events-auto group-data-expanded:opacity-100 group-data-expanded:delay-150">
-      <div class="flex items-center gap-3.5">
-        <a href="${esc(t.url)}" target="_blank" rel="noopener" aria-label="Apri in Spotify">${cover("size-16 rounded-[8px]")}</a>
-        <div class="min-w-0 flex-1">
-          <p class="truncate text-base font-bold tracking-[-.01em]">${esc(t.title)}</p>
-          <p class="truncate text-sm text-spotify-muted">${esc(t.artist)}</p>
-          ${!m.last && m.device ? `<p class="mt-0.5 flex items-center gap-1 text-xs font-bold text-spotify">${ICON.device}<span class="truncate">${esc(m.device)}</span></p>` : ""}
-        </div>
-        <a href="${esc(t.url)}" target="_blank" rel="noopener" aria-label="Apri in Spotify" class="self-start">${LOGO("size-6")}</a>
+  const ago = when ? (dayStart(when).getTime() === dayStart(new Date()).getTime() ? "oggi alle " + hm(when) : when.toLocaleDateString("it-IT", { day: "numeric", month: "long" })) : "";
+  const status = m.last ? `Ultimo ascolto${ago ? " · " + ago : ""}` : `${m.playing ? "In ascolto" : "In pausa"}${m.device ? " su " + m.device : ""}`;
+  // il pulsante che aveva il focus (es. play) viene ricreato: dopo il ridisegno il focus torna sul nuovo
+  const focused = document.activeElement?.dataset?.cmd;
+  card.innerHTML = `
+    <div class="flex items-start gap-4">
+      ${t.image ? `<img src="${esc(t.image)}" alt="" class="size-20 shrink-0 rounded-[8px] object-cover shadow-[0_8px_24px_rgba(0,0,0,.5)]">`
+        : `<span class="block size-20 shrink-0 rounded-[8px] bg-white/10"></span>`}
+      <div class="min-w-0 flex-1">
+        <p class="flex items-center gap-1.5 text-xs font-bold ${m.playing ? "text-spotify" : "text-spotify-muted"}">${m.playing ? EQ : ""}<span class="truncate">${esc(status)}</span></p>
+        <p class="mt-1 line-clamp-2 text-base/snug font-bold">${esc(t.title)}</p>
+        <p class="mt-0.5 line-clamp-1 text-sm text-spotify-muted">${esc(t.artist)}</p>
       </div>
-      ${m.last ? `
-      <p class="mt-4 text-sm text-spotify-muted">Ultimo ascolto${ago ? " · " + ago : ""}</p>
-      <a href="${esc(t.url)}" target="_blank" rel="noopener"
-        class="mt-4 inline-flex h-10 items-center rounded-full bg-spotify px-5 text-sm font-bold text-black transition hover:scale-104 active:scale-96">Apri Spotify</a>` : `
-      <div class="mt-4 flex items-center gap-2 text-[11px] text-spotify-muted tabular-nums">
-        <span id="mPos" class="w-8"></span>
-        <div class="h-1 flex-1 overflow-hidden rounded-full bg-white/25"><div id="mBar" class="h-full rounded-full bg-white"></div></div>
-        <span class="w-8 text-right">${mmss(t.duration)}</span>
-      </div>
-      <div class="mt-2 flex justify-center">
-        <div class="flex items-center gap-4">
-          <button type="button" data-cmd="previous" aria-label="Brano precedente" class="${SKIP}">${ICON.previous}</button>
-          <button type="button" data-cmd="${m.playing ? "pause" : "play"}" aria-label="${m.playing ? "Pausa" : "Riproduci"}"
-            class="grid size-12 cursor-pointer place-items-center rounded-full bg-spotify text-black transition hover:scale-104 active:scale-92">${m.playing ? ICON.pause : ICON.play}</button>
-          <button type="button" data-cmd="next" aria-label="Brano successivo" class="${SKIP}">${ICON.next}</button>
-        </div>
-      </div>`}
-    </div>`;
+      <a href="${esc(t.url)}" target="_blank" rel="noopener" aria-label="Apri ${esc(t.title)} in Spotify"
+        class="-mt-2.5 -mr-2.5 grid size-11 shrink-0 place-items-center rounded-full transition hover:scale-108 ${FOCUS}">${LOGO()}</a>
+    </div>
+    ${m.last ? `<a href="${esc(t.url)}" target="_blank" rel="noopener" class="mt-4 ${GREEN}">Apri in Spotify</a>` : `
+    <div class="mt-4">
+      <div id="mBar" role="progressbar" aria-label="Avanzamento del brano" aria-valuemin="0" aria-valuemax="${Math.round(t.duration / 1000)}"
+        class="h-1 overflow-hidden rounded-full bg-white/25"><div id="mFill" class="h-full rounded-full bg-white"></div></div>
+      <div aria-hidden="true" class="mt-1.5 flex justify-between text-[11px] text-spotify-muted tabular-nums"><span id="mPos"></span><span>${mmss(t.duration)}</span></div>
+    </div>
+    <div class="mt-1 flex items-center justify-center gap-4">
+      <button type="button" data-cmd="previous" aria-label="Brano precedente" class="${SKIP}">${ICON.previous}</button>
+      <button type="button" data-cmd="${m.playing ? "pause" : "play"}" aria-label="${m.playing ? "Metti in pausa" : "Riproduci"}"
+        class="grid size-14 cursor-pointer place-items-center rounded-full bg-spotify text-black transition hover:scale-104 active:scale-92 ${FOCUS}">${m.playing ? ICON.pause : ICON.play}</button>
+      <button type="button" data-cmd="next" aria-label="Brano successivo" class="${SKIP}">${ICON.next}</button>
+    </div>`}`;
+  if (focused) card.querySelector(focused === "play" || focused === "pause" ? "[data-cmd=play],[data-cmd=pause]" : `[data-cmd=${focused}]`)?.focus();
+  // VoiceOver: annuncia il cambio di brano o di stato, non ogni aggiornamento
+  const say = m.last ? "" : `${m.playing ? "In ascolto" : "In pausa"}: ${t.title}, ${t.artist}`;
+  if ($("musicStatus").textContent !== say) $("musicStatus").textContent = say;
   tickMusic();
 }
 
@@ -605,17 +591,12 @@ function tickMusic() {
   if (!music?.track || music.last || !$("mPos")) return;
   const pos = musicPos();
   $("mPos").textContent = mmss(pos);
-  $("mBar").style.width = `${music.track.duration ? pos / music.track.duration * 100 : 0}%`;
+  $("mFill").style.width = `${music.track.duration ? pos / music.track.duration * 100 : 0}%`;
+  $("mBar").setAttribute("aria-valuenow", Math.round(pos / 1000));
+  $("mBar").setAttribute("aria-valuetext", `${mmss(pos)} di ${mmss(music.track.duration)}`);
 }
 
-function island(open) {
-  islandOpen = open;
-  $("island").toggleAttribute("data-expanded", open);
-  $("island").querySelector("[data-island]")?.setAttribute("aria-expanded", open);
-}
-
-$("island").onclick = async e => {
-  if (e.target.closest("[data-island]")) return island(true);
+$("musicCard").onclick = async e => {
   const btn = e.target.closest("[data-cmd]");
   if (!btn) return;
   const cmd = btn.dataset.cmd;
@@ -632,15 +613,12 @@ $("island").onclick = async e => {
   }
   setTimeout(loadMusic, 700);  // Spotify ci mette un attimo ad aggiornare lo stato
 };
-// un tocco fuori dalla pillola, o Esc, la richiude
-document.addEventListener("click", e => { if (islandOpen && !$("island").contains(e.target)) island(false); });
-addEventListener("keydown", e => { if (e.key === "Escape" && islandOpen) island(false); });
 
 $("refresh").onclick = () => { load(true); loadMusic(); };
 renderPush();
 loadMusic();
 setInterval(tickMusic, 1000);
-setInterval(() => { if (!document.hidden) loadMusic(); }, 10000);
+setInterval(() => { if (!document.hidden && view === "home") loadMusic(); }, 10000);  // solo nella Home
 addEventListener("hashchange", route);
 route();                             // sceglie la schermata e disegna subito data e orologio, senza aspettare il server
 load();
